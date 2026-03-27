@@ -285,9 +285,51 @@ const BubbleSystem = (() => {
     thinkingMsgs.forEach(m => removeMessage(m));
   }
 
-  // ─── 显示 AI 回复 ───
+  // ─── 流式输出：实时更新最新气泡文字 ───
+  let streamingMsg = null;
+
+  function updateStreamingBubble(text) {
+    if (!text || !text.trim()) return;
+    const display = text.length > MAX_CHARS ? text.substring(0, MAX_CHARS) : text;
+
+    if (streamingMsg && streamingMsg.el && streamingMsg.el.parentNode) {
+      // 直接更新现有气泡
+      streamingMsg.textSpan.textContent = display;
+      // 重置定时器，防止流式途中被移除
+      if (streamingMsg.timer) clearTimeout(streamingMsg.timer);
+      streamingMsg.timer = setTimeout(() => removeMessage(streamingMsg), DEFAULT_DURATION);
+      return;
+    }
+
+    // 首次流式输出：先清掉 thinking 气泡，创建新气泡
+    hideThinking();
+    clearInterval(typeTimer);
+
+    const { el, textSpan } = createBubbleEl(display, display, false);
+    el.classList.add('bubble-streaming');
+
+    while (messages.length >= MAX_VISIBLE) removeMessage(messages[0]);
+    listEl.appendChild(el);
+
+    const msg = { el, textSpan, fullText: display, timer: null, isStreaming: true };
+    messages.push(msg);
+    streamingMsg = msg;
+
+    stackEl.classList.remove('hidden');
+    updateFadeStyles();
+
+    textSpan.textContent = display;
+    msg.timer = setTimeout(() => { removeMessage(msg); streamingMsg = null; }, DEFAULT_DURATION);
+  }
+
+  // ─── 显示 AI 回复（流式结束后调用，做最终确认） ───
   function showAIReply(text) {
     hideThinking();
+    // 清掉流式气泡（流式结束，换成最终完整版本）
+    if (streamingMsg) {
+      removeMessage(streamingMsg);
+      streamingMsg = null;
+    }
     pushMessage(text, DEFAULT_DURATION, true);
   }
 
@@ -389,5 +431,5 @@ const BubbleSystem = (() => {
     if (subtitleTimer) { clearTimeout(subtitleTimer); subtitleTimer = null; }
   }
 
-  return { show, hide, randomBubble, showAIReply, showThinking, hideThinking, showVoiceRecognizing, hideVoiceRecognizing, showSubtitle, hideSubtitle };
+  return { show, hide, randomBubble, showAIReply, showThinking, hideThinking, showVoiceRecognizing, hideVoiceRecognizing, showSubtitle, hideSubtitle, updateStreamingBubble };
 })();

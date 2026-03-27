@@ -91,10 +91,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onToggleVoiceMode: (callback) => ipcRenderer.on('toggle-voice-mode', () => callback()),
 
   // ─── 流式 ASR (腾讯云) ───
+  getAsrConfig: () => ipcRenderer.invoke('get-asr-config'),
+  saveAsrConfig: (data) => ipcRenderer.invoke('save-asr-config', data),
   asrCheck: () => ipcRenderer.invoke('asr-check'),
   asrStart: () => ipcRenderer.invoke('asr-start'),
   asrFeed: (data) => ipcRenderer.invoke('asr-feed', data),
-  asrStop: () => ipcRenderer.invoke('asr-stop'),
+  asrStop: (opts) => ipcRenderer.invoke('asr-stop', opts || {}),
   onAsrStreamingResult: (callback) => ipcRenderer.on('asr-streaming-result', (_, data) => callback(data)),
   onAsrVolume: (callback) => ipcRenderer.on('asr-volume', (_, data) => callback(data)),
 

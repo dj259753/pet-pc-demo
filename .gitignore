@@ -1,2 +1,11 @@
 node_modules/
 .DS_Store
+
+# 大型模型文件（onnx / bin）不上传
+models/moonshine-tiny/onnx/
+*.onnx
+*.bin
+
+# Electron 构建产物
+dist/
+release/*.zip

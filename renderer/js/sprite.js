@@ -54,7 +54,7 @@ const SpriteRenderer = (() => {
     error:        { sheet: 'idle',     frames: 6, speed: 500,  flipX: false, frameW: 128, frameH: 128 },
   };
 
-  // ─── 需要加载的精灵表文件列表 ───
+  // ─── 需要加载的精灵表文件列表（原版像素风，作为 fallback） ───
   const SHEET_FILES = {
     idle: 'sprites/idle.png',
     'walk-right': 'sprites/walk-right.png',
@@ -70,6 +70,188 @@ const SpriteRenderer = (() => {
     'working-2': 'sprites/working-2.png',
     eating: 'sprites/eating.png',
   };
+
+  // ═══════════════════════════════════════════
+  //  QC 动画系统 - 从 QQ宠物素材生成的精灵表
+  //  支持5级情绪 × (Stand/Speak/interact/play)
+  // ═══════════════════════════════════════════
+  
+  let qcManifest = null;       // QC 动画清单
+  let qcAnimConfig = {};       // QC 动画配置（与 ANIM_CONFIG 格式兼容）
+  let qcLoaded = false;        // QC 动画是否加载完成
+  let qcLoadedSheets = {};     // 已加载的 QC 精灵表
+  
+  // 动画池：按 mood 和类型索引
+  const QC_POOLS = {
+    stand:    {},  // { happy: ['happy-Stand'], peaceful: ['peaceful-Stand', 'peaceful-Stand1'] }
+    speak:    {},  // { happy: ['happy-Speak'], ... }
+    interact: {},  // { happy: ['happy-interact-H1', ...], ... }
+    play:     {},  // { happy: ['happy-play-P1', ...], ... }
+    appear:   {},  // { happy: ['happy-Appear'], ... }
+    hide:     {},  // { happy: ['happy-Hide'], ... }
+  };
+  
+  // 通用（不分情绪）动画池
+  const QC_COMMON = {
+    eat:     [],   // ['Eat1', 'Eat2']
+    clean:   [],
+    sick:    [],
+    enter:   [],
+    exit:    [],
+    cure:    [],
+    die:     [],
+    dying:   [],
+    levelup: [],
+    revival: [],
+  };
+  
+  // ─── 加载 QC 动画清单 ───
+  async function loadQCManifest() {
+    try {
+      const resp = await fetch('sprites/qc/animation-manifest.json');
+      if (!resp.ok) throw new Error('manifest not found');
+      qcManifest = await resp.json();
+      
+      // 解析并分类
+      for (const [name, config] of Object.entries(qcManifest)) {
+        // 注册动画配置
+        qcAnimConfig[name] = {
+          sheet: name,
+          frames: config.frames,
+          speed: config.speed || 250,
+          flipX: config.flipX || false,
+          frameW: config.frameW || 160,
+          frameH: config.frameH || 160,
+        };
+        
+        // 分类到动画池
+        const parts = name.split('-');
+        
+        if (parts.length === 1) {
+          // 通用动作：Eat1, Clean1, Sick1, Enter1, etc.
+          const lower = name.toLowerCase();
+          if (lower.startsWith('eat'))     QC_COMMON.eat.push(name);
+          else if (lower.startsWith('clean')) QC_COMMON.clean.push(name);
+          else if (lower.startsWith('sick'))  QC_COMMON.sick.push(name);
+          else if (lower.startsWith('enter')) QC_COMMON.enter.push(name);
+          else if (lower.startsWith('exit'))  QC_COMMON.exit.push(name);
+          else if (lower.startsWith('cure'))  QC_COMMON.cure.push(name);
+          else if (lower === 'die')           QC_COMMON.die.push(name);
+          else if (lower === 'dying')         QC_COMMON.dying.push(name);
+          else if (lower === 'levup')         QC_COMMON.levelup.push(name);
+          else if (lower === 'revival')       QC_COMMON.revival.push(name);
+        } else {
+          // 情绪动画：happy-Stand, peaceful-interact-H1, happy-play-P1, etc.
+          const mood = parts[0]; // happy, peaceful, sad, upset, prostrate
+          const type = parts.length === 2 ? parts[1].toLowerCase() : parts[1].toLowerCase();
+          
+          if (parts.length === 2) {
+            // happy-Stand, happy-Speak, happy-Appear, happy-Hide
+            const t = parts[1].toLowerCase().replace(/\d+$/, '');
+            if (t === 'stand')       { (QC_POOLS.stand[mood] = QC_POOLS.stand[mood] || []).push(name); }
+            else if (t === 'speak')  { (QC_POOLS.speak[mood] = QC_POOLS.speak[mood] || []).push(name); }
+            else if (t === 'appear') { (QC_POOLS.appear[mood] = QC_POOLS.appear[mood] || []).push(name); }
+            else if (t === 'hide')   { (QC_POOLS.hide[mood] = QC_POOLS.hide[mood] || []).push(name); }
+            else { (QC_POOLS.stand[mood] = QC_POOLS.stand[mood] || []).push(name); }
+          } else if (parts.length >= 3) {
+            // happy-interact-H1, happy-play-P1
+            const category = parts[1].toLowerCase();
+            if (category === 'interact') {
+              (QC_POOLS.interact[mood] = QC_POOLS.interact[mood] || []).push(name);
+            } else if (category === 'play') {
+              (QC_POOLS.play[mood] = QC_POOLS.play[mood] || []).push(name);
+            }
+          }
+        }
+      }
+      
+      console.log('🐧 QC动画清单加载完成:', Object.keys(qcManifest).length, '个动画');
+      console.log('   stand池:', Object.entries(QC_POOLS.stand).map(([k,v]) => `${k}(${v.length})`).join(', '));
+      console.log('   interact池:', Object.entries(QC_POOLS.interact).map(([k,v]) => `${k}(${v.length})`).join(', '));
+      console.log('   play池:', Object.entries(QC_POOLS.play).map(([k,v]) => `${k}(${v.length})`).join(', '));
+      console.log('   通用:', Object.entries(QC_COMMON).filter(([k,v]) => v.length > 0).map(([k,v]) => `${k}(${v.length})`).join(', '));
+      
+      return true;
+    } catch (e) {
+      console.warn('QC动画清单加载失败，使用原版动画:', e.message);
+      return false;
+    }
+  }
+  
+  // ─── 按需加载 QC 精灵表（懒加载） ───
+  function loadQCSheet(name) {
+    return new Promise((resolve) => {
+      if (qcLoadedSheets[name]) { resolve(qcLoadedSheets[name]); return; }
+      if (spriteSheets[name]) { resolve(spriteSheets[name]); return; }
+      
+      const img = new Image();
+      img.onload = () => {
+        spriteSheets[name] = img;
+        qcLoadedSheets[name] = img;
+        resolve(img);
+      };
+      img.onerror = () => {
+        console.warn(`QC精灵表加载失败: ${name}`);
+        resolve(null);
+      };
+      img.src = `sprites/qc/${name}.png`;
+    });
+  }
+  
+  // ─── 预加载指定心情的核心动画 ───
+  async function preloadMoodSheets(mood) {
+    const sheetsToLoad = [];
+    
+    // Stand + Speak 必加载
+    if (QC_POOLS.stand[mood]) sheetsToLoad.push(...QC_POOLS.stand[mood]);
+    if (QC_POOLS.speak[mood]) sheetsToLoad.push(...QC_POOLS.speak[mood]);
+    
+    // 通用动作
+    sheetsToLoad.push(...QC_COMMON.eat, ...QC_COMMON.clean);
+    
+    // 前几个 interact 和 play（不全部加载，太大）
+    if (QC_POOLS.interact[mood]) sheetsToLoad.push(...QC_POOLS.interact[mood].slice(0, 10));
+    if (QC_POOLS.play[mood]) sheetsToLoad.push(...QC_POOLS.play[mood].slice(0, 10));
+    
+    console.log(`🐧 预加载 ${mood} 心情动画: ${sheetsToLoad.length} 张`);
+    await Promise.all(sheetsToLoad.map(name => loadQCSheet(name)));
+    console.log(`🐧 ${mood} 心情动画预加载完成`);
+  }
+  
+  // ─── QC 动画选择接口 ───
+  
+  /** 获取当前心情的Stand动画名 */
+  function getQCStand(mood) {
+    const pool = QC_POOLS.stand[mood] || QC_POOLS.stand['peaceful'] || [];
+    return pool.length > 0 ? pool[0] : null;
+  }
+  
+  /** 获取当前心情的Speak动画名 */
+  function getQCSpeak(mood) {
+    const pool = QC_POOLS.speak[mood] || QC_POOLS.speak['peaceful'] || [];
+    return pool.length > 0 ? pool[0] : null;
+  }
+  
+  /** 从指定心情的 interact 池随机选一个 */
+  function getQCInteract(mood) {
+    const pool = QC_POOLS.interact[mood] || QC_POOLS.interact['peaceful'] || [];
+    if (pool.length === 0) return null;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+  
+  /** 从指定心情的 play 池随机选一个 */
+  function getQCPlay(mood) {
+    const pool = QC_POOLS.play[mood] || QC_POOLS.play['peaceful'] || [];
+    if (pool.length === 0) return null;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+  
+  /** 从通用动画池随机选一个 */
+  function getQCCommon(type) {
+    const pool = QC_COMMON[type] || [];
+    if (pool.length === 0) return null;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
 
   // ─── 分析精灵表每帧的内容边界 ───
   function analyzeFrameBounds(sheetName, img, frameW, frameH, frameCount) {
@@ -334,7 +516,7 @@ const SpriteRenderer = (() => {
 
   // ─── 渲染单帧 ───
   function drawSpriteFrame(animName, frame) {
-    const config = ANIM_CONFIG[animName] || ANIM_CONFIG.idle;
+    const config = getAnimConfig(animName);
     const sheet = spriteSheets[config.sheet];
 
     if (!sheet) {
@@ -380,7 +562,7 @@ const SpriteRenderer = (() => {
   // ─── 动画循环 ───
   function render(timestamp) {
     if (!frameTimer) frameTimer = timestamp;
-    const config = ANIM_CONFIG[currentAnim] || ANIM_CONFIG.idle;
+    const config = getAnimConfig(currentAnim);
 
     if (timestamp - frameTimer >= config.speed) {
       frameTimer = timestamp;
@@ -389,7 +571,7 @@ const SpriteRenderer = (() => {
 
     ctx.clearRect(0, 0, W, H);
 
-    if (spritesLoaded) {
+    if (spritesLoaded || qcLoaded) {
       drawSpriteFrame(currentAnim, frameIndex);
       drawOverlayEffects(currentAnim, frameIndex);
     }
@@ -400,6 +582,20 @@ const SpriteRenderer = (() => {
   // ─── 切换动画 ───
   function setAnimation(name) {
     if (name === currentAnim) return;
+    
+    // 优先查找 QC 动画
+    if (qcAnimConfig[name]) {
+      currentAnim = name;
+      frameIndex = 0;
+      frameTimer = 0;
+      // 懒加载精灵表
+      if (!spriteSheets[name]) {
+        loadQCSheet(name);
+      }
+      return;
+    }
+    
+    // 降级到原版动画
     if (ANIM_CONFIG[name]) {
       currentAnim = name;
       frameIndex = 0;
@@ -407,10 +603,30 @@ const SpriteRenderer = (() => {
     }
   }
 
+  // ─── 获取当前动画配置（合并 QC + 原版） ───
+  function getAnimConfig(animName) {
+    return qcAnimConfig[animName] || ANIM_CONFIG[animName] || ANIM_CONFIG.idle;
+  }
+
   // ─── 启动 ───
   function start() {
-    loadSpriteSheets().then(() => {
-      console.log('🐧 精灵表加载完成，启动渲染循环');
+    loadSpriteSheets().then(async () => {
+      console.log('🐧 原版精灵表加载完成');
+      
+      // 加载 QC 动画系统
+      const qcOk = await loadQCManifest();
+      if (qcOk) {
+        // 预加载默认心情（peaceful）的核心动画
+        await preloadMoodSheets('peaceful');
+        await preloadMoodSheets('happy');
+        qcLoaded = true;
+        
+        // 切换到 QC 的 idle 动画
+        const stand = getQCStand('peaceful');
+        if (stand) setAnimation(stand);
+      }
+      
+      console.log('🐧 启动渲染循环');
       requestAnimationFrame(render);
     });
   }
@@ -438,5 +654,16 @@ const SpriteRenderer = (() => {
     registerSheet,
     getFrameIndex() { return frameIndex; },
     get currentAnim() { return currentAnim; },
+    // QC 动画接口
+    get qcLoaded() { return qcLoaded; },
+    getQCStand,
+    getQCSpeak,
+    getQCInteract,
+    getQCPlay,
+    getQCCommon,
+    preloadMoodSheets,
+    loadQCSheet,
+    QC_POOLS,
+    QC_COMMON,
   };
 })();

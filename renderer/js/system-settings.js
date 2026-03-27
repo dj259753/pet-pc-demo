@@ -39,6 +39,7 @@ const SystemSettings = (() => {
 
   async function init() {
     await loadFromMain();
+    await loadAsrFromMain();
     bindEvents();
     render();
     applyToRuntime();
@@ -58,6 +59,34 @@ const SystemSettings = (() => {
       };
     } catch (e) {
       console.warn('读取系统设置失败:', e);
+    }
+  }
+
+  // ─── ASR 配置（独立于 systemSettings，不存 secretKey 到前端内存） ───
+  let asrCfg = { appId: '', secretId: '', secretKeySet: false, engineModelType: '16k_zh_large' };
+
+  async function loadAsrFromMain() {
+    if (!window.electronAPI?.getAsrConfig) return;
+    try {
+      const remote = await window.electronAPI.getAsrConfig();
+      asrCfg = remote || asrCfg;
+      renderAsrStatus();
+    } catch (e) {
+      console.warn('读取 ASR 配置失败:', e);
+    }
+  }
+
+  function renderAsrStatus() {
+    const appIdInput = document.getElementById('setting-asr-appid');
+    const secretIdInput = document.getElementById('setting-asr-secretid');
+    const statusEl = document.getElementById('setting-asr-status');
+    if (appIdInput) appIdInput.value = asrCfg.appId || '';
+    if (secretIdInput) secretIdInput.value = asrCfg.secretId || '';
+    // secretKey 不回填，只展示状态
+    if (statusEl) {
+      const ok = !!(asrCfg.appId && asrCfg.secretId && asrCfg.secretKeySet);
+      statusEl.textContent = ok ? '✅ 已配置' : (asrCfg.appId || asrCfg.secretId ? '⚠️ 配置不完整' : '❌ 未配置');
+      statusEl.style.color = ok ? '#4ade80' : (asrCfg.appId || asrCfg.secretId ? '#fbbf24' : '#f87171');
     }
   }
 
@@ -137,6 +166,36 @@ const SystemSettings = (() => {
         BubbleSystem.show('快捷键已保存，立即生效', 2200);
       });
     }
+
+    // ─── ASR 配置保存 ───
+    const btnSaveAsr = document.getElementById('setting-save-asr');
+    if (btnSaveAsr) {
+      btnSaveAsr.addEventListener('click', async () => {
+        if (!window.electronAPI?.saveAsrConfig) return;
+        const appId     = (document.getElementById('setting-asr-appid')?.value    || '').trim();
+        const secretId  = (document.getElementById('setting-asr-secretid')?.value || '').trim();
+        const secretKey = (document.getElementById('setting-asr-secretkey')?.value || '').trim();
+
+        if (!appId || !secretId) {
+          BubbleSystem.show('AppId 和 SecretId 不能为空', 2600);
+          return;
+        }
+
+        const result = await window.electronAPI.saveAsrConfig({ appId, secretId, secretKey });
+        if (result?.ok) {
+          asrCfg.appId = appId;
+          asrCfg.secretId = secretId;
+          if (secretKey) asrCfg.secretKeySet = true;
+          // 清空 secretKey 输入框（不留在内存）
+          const skInput = document.getElementById('setting-asr-secretkey');
+          if (skInput) skInput.value = '';
+          renderAsrStatus();
+          BubbleSystem.show('🎤 ASR 密钥已保存', 2200);
+        } else {
+          BubbleSystem.show(`保存失败: ${result?.error || '未知错误'}`, 2800);
+        }
+      });
+    }
   }
 
   function parseShortcutInput(input) {
@@ -210,6 +269,7 @@ const SystemSettings = (() => {
 
     syncShortcutLabels();
     renderNoiseSetting();
+    renderAsrStatus();
   }
 
   function getNoiseLevel() {

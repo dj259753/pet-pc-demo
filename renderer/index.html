@@ -22,12 +22,6 @@
   <!-- 咖啡杯（企鹅手上） -->
   <div id="coffee-cup">☕</div>
 
-  <!-- 气泡弹窗（多条堆叠） -->
-  <div id="bubble-stack" class="bubble-stack hidden">
-    <div id="bubble-list" class="bubble-list"></div>
-    <div class="bubble-tail"></div>
-  </div>
-
   <!-- 工作倒计时（已移至按钮显示，此处保留但隐藏） -->
   <div id="work-timer" class="work-timer hidden" style="display:none">
     <div class="work-timer-icon">💻</div>
@@ -62,6 +56,11 @@
 
   <!-- 宠物精灵区域 -->
   <div id="pet-container">
+    <!-- 气泡弹窗（多条堆叠，跟随宠物头顶） -->
+    <div id="bubble-stack" class="bubble-stack hidden">
+      <div id="bubble-list" class="bubble-list"></div>
+      <div class="bubble-tail"></div>
+    </div>
     <canvas id="pet-canvas" width="160" height="160"></canvas>
   </div>
 
@@ -227,6 +226,26 @@
         <div class="settings-item">
           <span>语音抗噪强度</span>
           <button id="setting-voice-noise" class="settings-toggle-btn">3 档（抗噪）</button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">🎤 语音识别 ASR</div>
+        <div class="settings-item settings-item-inline">
+          <span>AppId</span>
+          <input id="setting-asr-appid" class="settings-input" type="text" placeholder="腾讯云 AppId" autocomplete="off">
+        </div>
+        <div class="settings-item settings-item-inline">
+          <span>SecretId</span>
+          <input id="setting-asr-secretid" class="settings-input" type="text" placeholder="SecretId" autocomplete="off">
+        </div>
+        <div class="settings-item settings-item-inline">
+          <span>SecretKey</span>
+          <input id="setting-asr-secretkey" class="settings-input" type="password" placeholder="SecretKey（不显示）" autocomplete="new-password">
+        </div>
+        <div class="settings-item">
+          <span id="setting-asr-status" class="settings-asr-status">未配置</span>
+          <button id="setting-save-asr" class="settings-action-btn">保存密钥</button>
         </div>
       </div>
 

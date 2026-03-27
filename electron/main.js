@@ -1008,11 +1008,40 @@ ipcMain.handle('check-updates-now', async () => {
 // 将复杂问题委托给 WorkBuddy/OpenClaw 本体（复用其完整执行链路）
 ipcMain.handle('workbuddy-delegate', async (event, payload = {}) => {
   try {
-    const openclawPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
-    const raw = fs.readFileSync(openclawPath, 'utf-8');
+    // 按优先级尝试多个配置文件路径
+    const configCandidates = [
+      path.join(os.homedir(), '.qqclaw', 'openclaw.json'),
+      path.join(os.homedir(), '.openclaw', 'openclaw.json'),
+    ];
+    let configPath = null;
+    for (const cp of configCandidates) {
+      try {
+        if (fs.existsSync(cp)) {
+          const raw = fs.readFileSync(cp, 'utf-8');
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.gateway && parsed.gateway.auth && parsed.gateway.auth.token) {
+            configPath = cp;
+            break;
+          }
+        }
+      } catch {}
+    }
+    if (!configPath) {
+      // 回退：尝试任意一个存在的配置文件
+      for (const cp of configCandidates) {
+        if (fs.existsSync(cp)) { configPath = cp; break; }
+      }
+    }
+    if (!configPath) {
+      return { ok: false, error: '未找到 OpenClaw 配置文件（~/.qqclaw/openclaw.json 或 ~/.openclaw/openclaw.json）' };
+    }
+
+    const raw = fs.readFileSync(configPath, 'utf-8');
     const openclaw = JSON.parse(raw);
 
     const token = openclaw?.gateway?.auth?.token;
+    // 从配置文件读取 gateway 端口（不硬编码）
+    const cfgPort = openclaw?.gateway?.port || openclaw?.gateway?.apiPort || '';
     let aiCfg = {};
     try {
       const aiConfigPath = path.join(os.homedir(), '.qq-pet', 'config', 'ai-config.json');
@@ -1020,7 +1049,10 @@ ipcMain.handle('workbuddy-delegate', async (event, payload = {}) => {
         aiCfg = JSON.parse(fs.readFileSync(aiConfigPath, 'utf-8') || '{}');
       }
     } catch {}
-    const baseUrl = process.env.WORKBUDDY_API_URL || aiCfg.api_url || 'http://127.0.0.1:18789/v1/chat/completions';
+    // 优先级：环境变量 > ai-config.json（安装时探测到的） > 配置文件端口 > 空（让调用方知道没有可用接口）
+    const baseUrl = process.env.WORKBUDDY_API_URL
+      || aiCfg.api_url
+      || (cfgPort ? `http://127.0.0.1:${cfgPort}/v1/chat/completions` : '');
     const model = process.env.WORKBUDDY_MODEL || aiCfg.model || 'openclaw:main';
 
     if (!token) {
@@ -1869,6 +1901,53 @@ function buildAsrWsUrl(asrCfg) {
   return wsUrl;
 }
 
+// 读取 ASR 配置（返回脱敏后的数据，密钥只返回是否已填写）
+ipcMain.handle('get-asr-config', () => {
+  const { cfg, configPath } = loadAsrConfig();
+  return {
+    appId: cfg.appId,
+    secretId: cfg.secretId,
+    // secretKey 不回传明文，只告诉前端是否已配置
+    secretKeySet: !!cfg.secretKey,
+    engineModelType: cfg.engineModelType,
+    configPath,
+  };
+});
+
+// 保存 ASR 配置到 ~/.qq-pet/config/asr-config.json
+ipcMain.handle('save-asr-config', (event, data) => {
+  try {
+    const configPath = getAsrConfigPath();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+
+    // 读取现有配置（避免覆盖已有 secretKey）
+    let existing = {};
+    try {
+      if (fs.existsSync(configPath)) {
+        existing = JSON.parse(fs.readFileSync(configPath, 'utf-8') || '{}');
+      }
+    } catch {}
+
+    const next = {
+      appId:           String(data.appId    || existing.appId    || '').trim(),
+      secretId:        String(data.secretId || existing.secretId || '').trim(),
+      // 若前端传了 secretKey（非空）则更新；否则保留原来的
+      secretKey:       data.secretKey ? String(data.secretKey).trim() : String(existing.secretKey || '').trim(),
+      engineModelType: String(data.engineModelType || existing.engineModelType || ASR_CONFIG_DEFAULTS.engineModelType).trim(),
+    };
+
+    fs.writeFileSync(configPath, `${JSON.stringify(next, null, 2)}\n`, 'utf-8');
+    // 设为只有当前用户可读写
+    try { fs.chmodSync(configPath, 0o600); } catch {}
+
+    console.log('🎤 ASR 配置已保存:', configPath);
+    return { ok: true, configPath };
+  } catch (e) {
+    console.error('🎤 保存 ASR 配置失败:', e.message);
+    return { ok: false, error: e.message };
+  }
+});
+
 // 检测 ASR 可用性
 ipcMain.handle('asr-check', async () => {
   const { cfg, configPath } = loadAsrConfig();
@@ -2105,7 +2184,8 @@ ipcMain.handle('asr-feed', async () => {
 });
 
 // 结束流式识别
-ipcMain.handle('asr-stop', async () => {
+// quick=true：realtime 分段模式，跳过等待最终结果（用已有流式文本），让 asr-start 尽快启动
+ipcMain.handle('asr-stop', async (event, { quick = false } = {}) => {
   try {
     // 先停止 ffmpeg 麦克风采集
     if (micProcess) {
@@ -2120,44 +2200,50 @@ ipcMain.handle('asr-stop', async () => {
 
     if (asrWs && asrWs.readyState === WebSocket.OPEN) {
       try {
-        // 发送一个空的音频帧，通知 ASR 音频结束
-        // 腾讯云 ASR 会在收到空帧或连接关闭后返回最终结果
-        asrWs.send(Buffer.alloc(0));
+        if (quick) {
+          // realtime 分段：不等最终结果，直接关闭，让 asr-start 立即可用
+          console.log('🎤 快速停止 ASR（realtime 分段模式）');
+          try { asrWs.close(); } catch {}
+        } else {
+          // 发送一个空的音频帧，通知 ASR 音频结束
+          // 腾讯云 ASR 会在收到空帧或连接关闭后返回最终结果
+          asrWs.send(Buffer.alloc(0));
 
-        // 等待最后的识别结果（最多 3 秒）
-        await new Promise((resolve) => {
-          const waitTimeout = setTimeout(() => {
-            console.log('🎤 等待最终结果超时，使用已有结果');
-            resolve();
-          }, 3000);
+          // 等待最后的识别结果（最多 3 秒）
+          await new Promise((resolve) => {
+            const waitTimeout = setTimeout(() => {
+              console.log('🎤 等待最终结果超时，使用已有结果');
+              resolve();
+            }, 3000);
 
-          const onMessage = (data) => {
-            try {
-              const msg = JSON.parse(data.toString());
-              if (msg.final === 1 || (msg.result && msg.result.slice_type === 2)) {
-                if (msg.result && msg.result.voice_text_str) {
-                  asrFinalText += msg.result.voice_text_str;
-                  asrCurrentText = '';
+            const onMessage = (data) => {
+              try {
+                const msg = JSON.parse(data.toString());
+                if (msg.final === 1 || (msg.result && msg.result.slice_type === 2)) {
+                  if (msg.result && msg.result.voice_text_str) {
+                    asrFinalText += msg.result.voice_text_str;
+                    asrCurrentText = '';
+                  }
+                  clearTimeout(waitTimeout);
+                  resolve();
                 }
-                clearTimeout(waitTimeout);
-                resolve();
-              }
-            } catch {}
-          };
+              } catch {}
+            };
 
-          if (asrWs) {
-            asrWs.on('message', onMessage);
-            // 清理
-            setTimeout(() => {
-              try { if (asrWs) asrWs.removeListener('message', onMessage); } catch {}
-            }, 3100);
-          } else {
-            clearTimeout(waitTimeout);
-            resolve();
-          }
-        });
+            if (asrWs) {
+              asrWs.on('message', onMessage);
+              // 清理
+              setTimeout(() => {
+                try { if (asrWs) asrWs.removeListener('message', onMessage); } catch {}
+              }, 3100);
+            } else {
+              clearTimeout(waitTimeout);
+              resolve();
+            }
+          });
 
-        try { if (asrWs) asrWs.close(); } catch {}
+          try { if (asrWs) asrWs.close(); } catch {}
+        }
       } catch (e) {
         console.warn('🎤 ASR 关闭异常:', e.message);
       }
@@ -2280,135 +2366,281 @@ function sanitizeSkillText(text, fallback = '') {
 }
 
 /**
- * 从 ~/.workbuddy/skills/ 读取已安装 skills 列表
- * 返回 [{ id, name, displayName, desc, source, version, installed: true, emoji }]
+ * 解析所有可能的已安装 skills 目录
+ * 优先级：~/.qqclaw/workspace/skills/ > ~/.openclaw/workspace/skills/（旧版兼容）
+ */
+function resolveAllSkillsDirs() {
+  const candidates = [
+    path.join(os.homedir(), '.qqclaw', 'workspace', 'skills'),   // QQClaw 主路径
+    path.join(os.homedir(), '.openclaw', 'workspace', 'skills'),  // 旧版 openclaw 兼容
+  ];
+  return candidates.filter(d => fs.existsSync(d));
+}
+
+/**
+ * 从 QQClaw skills 目录读取已安装 skills 列表
+ * 返回 [{ id, name, displayName, desc, source, version, installed: true, emoji, skillsDir }]
  */
 function getInstalledSkills() {
-  const skillsDir = path.join(os.homedir(), '.workbuddy', 'skills');
-  if (!fs.existsSync(skillsDir)) return [];
+  const allDirs = resolveAllSkillsDirs();
+  if (allDirs.length === 0) return [];
 
-  const dirs = fs.readdirSync(skillsDir, { withFileTypes: true })
-    .filter(d => d.isDirectory());
+  const seen = new Set(); // 去重（同名 skill 只取第一个）
+  const results = [];
 
-  return dirs.map(d => {
-    const skillPath = path.join(skillsDir, d.name);
-    const result = {
-      id: d.name,
-      name: d.name,
-      displayName: d.name,
-      desc: '',
-      source: 'unknown',
-      version: '',
-      installed: true,
-      emoji: '🧩',
-    };
+  for (const skillsDir of allDirs) {
+    const dirs = fs.readdirSync(skillsDir, { withFileTypes: true })
+      .filter(d => d.isDirectory());
 
-    // 读 _skillhub_meta.json
-    const metaPath = path.join(skillPath, '_skillhub_meta.json');
-    if (fs.existsSync(metaPath)) {
-      try {
-        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-        result.source = sanitizeSkillText(meta.source, 'unknown');
-        result.version = meta.version || '';
-        if (meta.name) result.displayName = sanitizeSkillText(meta.name, result.displayName);
-        if (meta.slug) result.id = sanitizeSkillText(meta.slug, result.id);
-      } catch (e) { /* ignore */ }
-    }
+    for (const d of dirs) {
+      if (seen.has(d.name)) continue; // 已被优先目录收录，跳过
+      seen.add(d.name);
 
-    // 读 SKILL.md frontmatter
-    const skillMdPath = path.join(skillPath, 'SKILL.md');
-    if (fs.existsSync(skillMdPath)) {
-      try {
-        const content = fs.readFileSync(skillMdPath, 'utf-8');
-        const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
-        if (fmMatch) {
-          const fm = fmMatch[1];
-          // 提取 description_zh 或 description
-          const zhMatch = fm.match(/description_zh:\s*["']?(.+?)["']?\s*$/m);
-          const descMatch = fm.match(/^description:\s*["']?(.+?)["']?\s*$/m);
-          const nameMatch = fm.match(/^name:\s*["']?(.+?)["']?\s*$/m);
+      const skillPath = path.join(skillsDir, d.name);
+      const result = {
+        id: d.name,
+        name: d.name,
+        displayName: d.name,
+        desc: '',
+        source: 'unknown',
+        version: '',
+        installed: true,
+        emoji: '🧩',
+        skillsDir, // 记录来源目录，供安装/卸载使用
+      };
 
-          if (zhMatch) result.desc = sanitizeSkillText(zhMatch[1], '');
-          else if (descMatch) result.desc = sanitizeSkillText(descMatch[1], '');
-          if (nameMatch && !result.displayName) result.displayName = sanitizeSkillText(nameMatch[1], result.displayName);
+      // 读 _skillhub_meta.json
+      const metaPath = path.join(skillPath, '_skillhub_meta.json');
+      if (fs.existsSync(metaPath)) {
+        try {
+          const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+          result.source = sanitizeSkillText(meta.source, 'unknown');
+          result.version = meta.version || '';
+          if (meta.name) result.displayName = sanitizeSkillText(meta.name, result.displayName);
+          if (meta.slug) result.id = sanitizeSkillText(meta.slug, result.id);
+        } catch (e) { /* ignore */ }
+      }
 
-          // 提取 emoji
-          const metadataMatch = fm.match(/metadata:\s*(\{.*\})/);
-          if (metadataMatch) {
-            try {
-              const md = JSON.parse(metadataMatch[1]);
-              if (md.clawdbot && md.clawdbot.emoji) result.emoji = md.clawdbot.emoji;
-            } catch (e) { /* ignore */ }
+      // 读 SKILL.md frontmatter
+      const skillMdPath = path.join(skillPath, 'SKILL.md');
+      if (fs.existsSync(skillMdPath)) {
+        try {
+          const content = fs.readFileSync(skillMdPath, 'utf-8');
+          const fmMatch = content.match(/^---\n([\s\S]*?)\n---/);
+          if (fmMatch) {
+            const fm = fmMatch[1];
+            const zhMatch = fm.match(/description_zh:\s*["']?(.+?)["']?\s*$/m);
+            const descMatch = fm.match(/^description:\s*["']?(.+?)["']?\s*$/m);
+            const nameMatch = fm.match(/^name:\s*["']?(.+?)["']?\s*$/m);
+
+            if (zhMatch) result.desc = sanitizeSkillText(zhMatch[1], '');
+            else if (descMatch) result.desc = sanitizeSkillText(descMatch[1], '');
+            if (nameMatch && !result.displayName) result.displayName = sanitizeSkillText(nameMatch[1], result.displayName);
+
+            const metadataMatch = fm.match(/metadata:\s*(\{.*\})/);
+            if (metadataMatch) {
+              try {
+                const md = JSON.parse(metadataMatch[1]);
+                if (md.clawdbot && md.clawdbot.emoji) result.emoji = md.clawdbot.emoji;
+              } catch (e) { /* ignore */ }
+            }
           }
-        }
-      } catch (e) { /* ignore */ }
-    }
+        } catch (e) { /* ignore */ }
+      }
 
-    result.id = sanitizeSkillText(result.id, d.name);
-    result.name = sanitizeSkillText(result.name, d.name);
-    result.displayName = sanitizeSkillText(result.displayName, result.name);
-    result.desc = sanitizeSkillText(result.desc, '描述暂不可读');
-    return result;
-  }).filter(Boolean);
+      result.id = sanitizeSkillText(result.id, d.name);
+      result.name = sanitizeSkillText(result.name, d.name);
+      result.displayName = sanitizeSkillText(result.displayName, result.name);
+      result.desc = sanitizeSkillText(result.desc, '描述暂不可读');
+      results.push(result);
+    }
+  }
+
+  return results;
 }
 
 function resolveInstalledSkillDir(skillId) {
-  const skillsDir = path.join(os.homedir(), '.workbuddy', 'skills');
-  if (!fs.existsSync(skillsDir)) return null;
-  const dirs = fs.readdirSync(skillsDir, { withFileTypes: true }).filter(d => d.isDirectory());
+  const allDirs = resolveAllSkillsDirs();
+  for (const skillsDir of allDirs) {
+    const dirs = fs.readdirSync(skillsDir, { withFileTypes: true }).filter(d => d.isDirectory());
+    for (const d of dirs) {
+      const dirName = d.name;
+      const skillPath = path.join(skillsDir, dirName);
+      if (dirName === skillId) return skillPath;
 
-  for (const d of dirs) {
-    const dirName = d.name;
-    const skillPath = path.join(skillsDir, dirName);
-    if (dirName === skillId) return skillPath;
-
-    const metaPath = path.join(skillPath, '_skillhub_meta.json');
-    if (fs.existsSync(metaPath)) {
-      try {
-        const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
-        if (meta.slug === skillId || meta.name === skillId || meta.sourceSkillId === skillId) {
-          return skillPath;
-        }
-      } catch (e) {}
+      const metaPath = path.join(skillPath, '_skillhub_meta.json');
+      if (fs.existsSync(metaPath)) {
+        try {
+          const meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+          if (meta.slug === skillId || meta.name === skillId || meta.sourceSkillId === skillId) {
+            return skillPath;
+          }
+        } catch (e) {}
+      }
     }
   }
   return null;
 }
 
 /**
- * 从 marketplace.json 读取市场可用 skills
- * 排除已安装的，返回 [{ id, name, displayName, desc, source: 'marketplace-available', installed: false }]
+ * 从 QQClaw skillhub marketplace 读取可用 skills
+ * marketplace.json 位于 ~/.qqclaw/workspace/skills-marketplace/.codebuddy-skill/marketplace.json
+ * 兼容旧版 ~/.openclaw/workspace/skills-marketplace/
  */
 function getMarketplaceSkills(installedIds) {
-  const catalogPath = path.join(os.homedir(), '.workbuddy', 'skills-marketplace',
-    '.codebuddy-skill', 'marketplace.json');
-  if (!fs.existsSync(catalogPath)) return [];
+  const marketplacePaths = [
+    path.join(os.homedir(), '.qqclaw', 'workspace', 'skills-marketplace', '.codebuddy-skill', 'marketplace.json'),
+    path.join(os.homedir(), '.openclaw', 'workspace', 'skills-marketplace', '.codebuddy-skill', 'marketplace.json'),
+  ];
 
+  for (const catalogPath of marketplacePaths) {
+    if (!fs.existsSync(catalogPath)) continue;
+    try {
+      const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf-8'));
+      const skills = catalog.skills || [];
+      return skills
+        .filter(s => !installedIds.has(s.source) && !installedIds.has(s.name))
+        .map(s => ({
+          id: sanitizeSkillText(s.source || s.name, 'unknown-skill'),
+          name: sanitizeSkillText(s.source || s.name, 'unknown-skill'),
+          displayName: sanitizeSkillText(s.name, '未命名技能'),
+          desc: sanitizeSkillText(s.description_zh || s.description || '', '描述暂不可读'),
+          source: 'marketplace-available',
+          installed: false,
+          emoji: '📦',
+        }));
+    } catch (e) {
+      console.error('读取 marketplace.json 失败:', e.message);
+    }
+  }
+  return [];
+}
+
+// ── 内置 skillhub CLI 路径（QQClaw 打包资源，或宠物运行时同级目录） ──
+function resolveSkillhubCli() {
+  const candidates = [
+    // QQClaw 打包后的内置 CLI
+    path.join(os.homedir(), '.qq-pet', 'source', 'pc-pet-demo', '..', '..', '..', '..', 'holdclaw', 'holdclaw',
+      'resources', 'targets', 'darwin-arm64', 'skillhub-cli', 'skills_store_cli.py'),
+    // 直接找 holdclaw 的资源目录
+    '/Users/Apple/Desktop/holdclaw/holdclaw/resources/targets/darwin-arm64/skillhub-cli/skills_store_cli.py',
+    path.join(os.homedir(), 'Desktop', 'holdclaw', 'holdclaw', 'resources', 'targets', 'darwin-arm64', 'skillhub-cli', 'skills_store_cli.py'),
+    // QQClaw.app 打包内的 CLI
+    path.join('/Applications', 'QQClaw.app', 'Contents', 'Resources', 'app', 'resources', 'targets', 'darwin-arm64', 'skillhub-cli', 'skills_store_cli.py'),
+  ];
+  return candidates.find(p => fs.existsSync(p)) || null;
+}
+
+function resolvePythonBin() {
+  const candidates = ['python3', 'python', '/opt/homebrew/bin/python3', '/usr/local/bin/python3', '/usr/bin/python3'];
+  for (const p of candidates) {
+    try { require('child_process').execSync(`${p} --version`, { stdio: 'pipe' }); return p; } catch {}
+  }
+  return null;
+}
+
+async function installViaSkillhubCli(skillId, skillsDir) {
+  const cli = resolveSkillhubCli();
+  const python = resolvePythonBin();
+
+  if (!cli || !python) {
+    // 降级：直接从 lightmake.site API 下载 zip 安装
+    return installViaDirectDownload(skillId, skillsDir);
+  }
+
+  return new Promise((resolve) => {
+    const args = [cli, '--dir', skillsDir, 'install', skillId];
+    exec(`${python} ${args.map(a => `"${a}"`).join(' ')}`, { timeout: 60000 }, (err, stdout, stderr) => {
+      if (err) {
+        console.error(`❌ skillhub CLI 安装失败:`, err.message, stderr);
+        resolve({ ok: false, error: err.message || stderr });
+      } else {
+        console.log(`✅ skillhub CLI 安装成功: ${skillId}\n${stdout}`);
+        resolve({ ok: true });
+      }
+    });
+  });
+}
+
+// 降级方案：直接从 lightmake.site 下载 zip 解压
+async function installViaDirectDownload(skillId, skillsDir) {
   try {
-    const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf-8'));
-    const skills = catalog.skills || [];
-    return skills
-      .filter(s => !installedIds.has(s.source) && !installedIds.has(s.name))
-      .map(s => ({
-        id: sanitizeSkillText(s.source || s.name, 'unknown-skill'),
-        name: sanitizeSkillText(s.source || s.name, 'unknown-skill'),
-        displayName: sanitizeSkillText(s.name, '未命名技能'),
-        desc: sanitizeSkillText(s.description_zh || s.description || '', '描述暂不可读'),
-        source: 'marketplace-available',
-        installed: false,
-        emoji: '📦',
-      }));
+    const downloadUrl = `https://lightmake.site/api/v1/download?slug=${encodeURIComponent(skillId)}`;
+    const AdmZip = require('adm-zip');
+    const tmpZip = path.join(os.tmpdir(), `skill-${skillId}-${Date.now()}.zip`);
+
+    // 下载 zip
+    await new Promise((resolve, reject) => {
+      const https = require('https');
+      const file = require('fs').createWriteStream(tmpZip);
+      https.get(downloadUrl, res => {
+        if (res.statusCode !== 200) { reject(new Error(`HTTP ${res.statusCode}`)); return; }
+        res.pipe(file);
+        file.on('finish', () => { file.close(); resolve(); });
+      }).on('error', reject);
+    });
+
+    // 解压
+    const zip = new AdmZip(tmpZip);
+    zip.extractAllTo(skillsDir, true);
+    fs.unlinkSync(tmpZip);
+    console.log(`✅ 直接下载安装成功: ${skillId}`);
+    return { ok: true };
   } catch (e) {
-    console.error('读取 marketplace.json 失败:', e.message);
-    return [];
+    console.error('❌ 直接下载安装失败:', e.message);
+    return { ok: false, error: e.message };
+  }
+}
+const SKILLHUB_API_BASE = 'https://lightmake.site';
+const SKILLHUB_LIST_URL = `${SKILLHUB_API_BASE}/api/skills`;
+const SKILLHUB_TOP_URL  = `${SKILLHUB_API_BASE}/api/skills/top`;
+const SKILLHUB_FETCH_TIMEOUT = 10000;
+
+async function fetchSkillhubStore({ keyword = '', page = 1, pageSize = 50, sortBy = 'score' } = {}) {
+  const params = new URLSearchParams({ page, pageSize, sortBy });
+  if (keyword) params.set('keyword', keyword);
+  const url = `${SKILLHUB_LIST_URL}?${params}`;
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), SKILLHUB_FETCH_TIMEOUT);
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    // API 响应结构: { code, data: { skills: [...], total } }
+    const skills = (json?.data?.skills || json?.skills || []).map(s => ({
+      id:          String(s.slug || s.id || s.name || ''),
+      name:        String(s.slug || s.name || ''),
+      displayName: String(s.name || s.slug || '未命名技能'),
+      desc:        String(s.description_zh || s.description || ''),
+      emoji:       String(s.emoji || s.icon || '📦'),
+      source:      'skillhub-store',
+      version:     String(s.version || ''),
+      installed:   false,
+    }));
+    return { skills, total: json?.data?.total || skills.length };
+  } catch (e) {
+    console.warn('🧩 获取 skillhub 商店失败:', e.message);
+    return { skills: [], total: 0 };
   }
 }
 
-// Skills 列表请求
+// Skills 列表请求（已安装 + 商店推荐）
 ipcMain.handle('skills-get-list', async () => {
+  // 1. 读本地已安装
   const installed = getInstalledSkills();
-  const installedIds = new Set(installed.map(s => s.id).concat(installed.map(s => s.displayName)));
-  const marketplace = getMarketplaceSkills(installedIds);
+  const installedSlugs = new Set([
+    ...installed.map(s => s.id),
+    ...installed.map(s => s.name),
+    ...installed.map(s => s.displayName),
+  ]);
+
+  // 2. 从 lightmake.site 拉商店推荐（Top 50），过滤掉已安装的
+  const { skills: storeSkills } = await fetchSkillhubStore({ sortBy: 'score', pageSize: 50 });
+  const marketplace = storeSkills.filter(
+    s => !installedSlugs.has(s.id) && !installedSlugs.has(s.name) && !installedSlugs.has(s.displayName)
+  );
+
   return { installed, marketplace };
 });
 
@@ -2433,22 +2665,26 @@ ipcMain.handle('skills-install', async (event, { skillId, source }) => {
   console.log(`🧩 安装 Skill: ${skillId} (来源: ${source})`);
 
   try {
-    if (source === 'marketplace-available') {
-      // marketplace skill: 从 skills-marketplace 仓库复制到 ~/.workbuddy/skills/
-      const srcDir = path.join(os.homedir(), '.workbuddy', 'skills-marketplace', 'skills', skillId);
-      const dstDir = path.join(os.homedir(), '.workbuddy', 'skills', skillId);
+    const qqclawSkillsDir = path.join(os.homedir(), '.qqclaw', 'workspace', 'skills');
+    fs.mkdirSync(qqclawSkillsDir, { recursive: true });
 
-      if (!fs.existsSync(srcDir)) {
+    if (source === 'skillhub-store') {
+      // 公开商店 skill：调用内置 skillhub Python CLI 安装
+      return await installViaSkillhubCli(skillId, qqclawSkillsDir);
+    } else if (source === 'marketplace-available') {
+      // 旧版本地 marketplace（离线包）
+      const marketplaceBases = [
+        path.join(os.homedir(), '.qqclaw', 'workspace', 'skills-marketplace', 'skills'),
+        path.join(os.homedir(), '.openclaw', 'workspace', 'skills-marketplace', 'skills'),
+      ];
+      const srcBase = marketplaceBases.find(b => fs.existsSync(path.join(b, skillId)));
+      if (!srcBase) {
         return { ok: false, error: `找不到 skill 源目录: ${skillId}` };
       }
-
-      // 递归复制目录
-      copyDirSync(srcDir, dstDir);
-
-      // 写入 _skillhub_meta.json
+      const dstDir = path.join(qqclawSkillsDir, skillId);
+      copyDirSync(path.join(srcBase, skillId), dstDir);
       const meta = { name: skillId, installedAt: Date.now(), source: 'marketplace' };
       fs.writeFileSync(path.join(dstDir, '_skillhub_meta.json'), JSON.stringify(meta, null, 2));
-
       console.log(`✅ Marketplace skill 安装成功: ${skillId}`);
     } else {
       const auth = getGitAuthConfig();
@@ -2461,9 +2697,9 @@ ipcMain.handle('skills-install', async (event, { skillId, source }) => {
           guideUrl: GIT_AUTH_GUIDE_URL,
         };
       }
-      // skillhub skill: 用 npx skills add
+      // 私有 skillhub skill: 用 npx skills add，安装到 ~/.qqclaw/workspace/skills/
       return await new Promise((resolve) => {
-        const cmd = `npx skills add ${skillId} -g -y`;
+        const cmd = `npx skills add ${skillId} --dir "${qqclawSkillsDir}" -y`;
         const env = {
           ...process.env,
           GIT_PRIVATE_TOKEN: auth.token,
@@ -2567,19 +2803,19 @@ app.whenReady().then(() => {
 
   registerGlobalShortcutsFromSettings();
 
-  // 启动自动更新检查
-  const updateCfg = getUpdateConfig();
-  if (updateCfg && updateCfg.enabled) {
-    // 启动后快速做一次手动检查，方便立即验证更新弹窗
-    setTimeout(() => { checkForUpdates('manual'); }, 3000);
-    setTimeout(() => { checkForUpdates('auto'); }, 15000);
-    const intervalMinutes = Math.max(1, updateCfg.checkIntervalMinutes);
-    const intervalMs = intervalMinutes * 60 * 1000;
-    updateCheckTimer = setInterval(() => { checkForUpdates('auto'); }, intervalMs);
-    console.log(`🔄 自动更新已启用，每 ${intervalMinutes} 分钟检查一次`);
-  } else {
-    console.log('🔄 自动更新未启用（缺少 ~/.qq-pet/config/update-config.json）');
-  }
+  // 自动更新已临时禁用（等 GitHub 更新源就绪后重新启用）
+  // const updateCfg = getUpdateConfig();
+  // if (updateCfg && updateCfg.enabled) {
+  //   setTimeout(() => { checkForUpdates('manual'); }, 3000);
+  //   setTimeout(() => { checkForUpdates('auto'); }, 15000);
+  //   const intervalMinutes = Math.max(1, updateCfg.checkIntervalMinutes);
+  //   const intervalMs = intervalMinutes * 60 * 1000;
+  //   updateCheckTimer = setInterval(() => { checkForUpdates('auto'); }, intervalMs);
+  //   console.log(`🔄 自动更新已启用，每 ${intervalMinutes} 分钟检查一次`);
+  // } else {
+  //   console.log('🔄 自动更新未启用（缺少 ~/.qq-pet/config/update-config.json）`);
+  // }
+  console.log('🔄 自动更新已临时禁用，等 GitHub 更新源就绪后重新启用');
 });
 
 app.on('will-quit', () => {

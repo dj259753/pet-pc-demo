@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { margin: 0; padding: 0; }
+    body { background: transparent; overflow: hidden; }
+    #player-container { width: 200px; height: 200px; position: relative; }
+    ruffle-embed, ruffle-object, #player-container object, #player-container embed {
+      width: 200px !important;
+      height: 200px !important;
+    }
+    #capture-canvas { display: none; }
+  </style>
+</head>
+<body>
+  <div id="player-container"></div>
+  <canvas id="capture-canvas"></canvas>
+  
+  <script>
+    // Ruffle 加载
+    window.RufflePlayer = window.RufflePlayer || {};
+    window.RufflePlayer.config = {
+      autoplay: "off",
+      unmuteOverlay: "hidden",
+      contextMenu: false,
+      splashScreen: false,
+      preloader: false,
+      maxExecutionDuration: { secs: 30, nanos: 0 },
+      logLevel: "error",
+    };
+  </script>
+  <script src="ruffle.js"></script>
+  <script>
+    const { ipcRenderer } = require('electron');
+    
+    let player = null;
+    let captureCanvas = document.getElementById('capture-canvas');
+    let captureCtx = captureCanvas.getContext('2d');
+    
+    async function init(swfPath, width, height) {
+      const ruffle = window.RufflePlayer.newest();
+      const container = document.getElementById('player-container');
+      container.style.width = width + 'px';
+      container.style.height = height + 'px';
+      
+      player = ruffle.createPlayer();
+      player.style.width = width + 'px';
+      player.style.height = height + 'px';
+      container.appendChild(player);
+      
+      captureCanvas.width = width;
+      captureCanvas.height = height;
+      
+      try {
+        // 读取SWF文件 - 需要修复前缀
+        const fs = require('fs');
+        const data = fs.readFileSync(swfPath);
+        
+        // 查找 CWS/FWS/ZWS 签名位置
+        let offset = 0;
+        for (let i = 0; i < Math.min(20, data.length - 3); i++) {
+          const sig = data.slice(i, i + 3).toString('ascii');
+          if (sig === 'CWS' || sig === 'FWS' || sig === 'ZWS') {
+            offset = i;
+            break;
+          }
+        }
+        
+        const cleanData = data.slice(offset);
+        await player.load({ data: cleanData, fileName: swfPath });
+        
+        // 等待加载完成
+        await new Promise(r => setTimeout(r, 500));
+        
+        return true;
+      } catch (e) {
+        console.error('Load failed:', e);
+        return false;
+      }
+    }
+    
+    async function captureFrames(totalFrames, frameDelay) {
+      const frames = [];
+      
+      player.play();
+      await new Promise(r => setTimeout(r, 200));
+      
+      for (let i = 0; i < totalFrames; i++) {
+        // 等待一帧渲染
+        await new Promise(r => setTimeout(r, frameDelay));
+        
+        // 获取 Ruffle 内部 canvas
+        const ruffleCanvas = player.querySelector('canvas') || player.shadowRoot?.querySelector('canvas');
+        if (!ruffleCanvas) {
+          console.error('Cannot find Ruffle canvas');
+          break;
+        }
+        
+        // 截图
+        captureCtx.clearRect(0, 0, captureCanvas.width, captureCanvas.height);
+        captureCtx.drawImage(ruffleCanvas, 0, 0, captureCanvas.width, captureCanvas.height);
+        
+        const dataUrl = captureCanvas.toDataURL('image/png');
+        frames.push(dataUrl);
+      }
+      
+      player.pause();
+      return frames;
+    }
+    
+    // 自动检测帧数（通过播放然后检测画面变化）
+    async function detectAndCapture(maxFrames, frameDelay) {
+      const frames = [];
+      const seenHashes = new Set();
+      let unchangedCount = 0;
+      
+      // 先截一帧空白，提取背景色
+      player.play();
+      await new Promise(r => setTimeout(r, 300));
+      
+      // 检测背景色（从第一帧的四个角取样）
+      const ruffleCanvasInit = player.querySelector('canvas') || player.shadowRoot?.querySelector('canvas');
+      let bgR = 66, bgG = 99, bgB = 255; // 默认 #4263FF
+      if (ruffleCanvasInit) {
+        captureCtx.clearRect(0, 0, captureCanvas.width, captureCanvas.height);
+        captureCtx.drawImage(ruffleCanvasInit, 0, 0, captureCanvas.width, captureCanvas.height);
+        const sample = captureCtx.getImageData(0, 0, 1, 1).data;
+        if (sample[3] > 200) { // 非透明
+          bgR = sample[0]; bgG = sample[1]; bgB = sample[2];
+        }
+      }
+      console.log(`Background color detected: rgb(${bgR},${bgG},${bgB})`);
+      
+      for (let i = 0; i < maxFrames; i++) {
+        await new Promise(r => setTimeout(r, frameDelay));
+        
+        const ruffleCanvas = player.querySelector('canvas') || player.shadowRoot?.querySelector('canvas');
+        if (!ruffleCanvas) break;
+        
+        captureCtx.clearRect(0, 0, captureCanvas.width, captureCanvas.height);
+        captureCtx.drawImage(ruffleCanvas, 0, 0, captureCanvas.width, captureCanvas.height);
+        
+        // ★ 去除背景色 → 透明
+        const imageData = captureCtx.getImageData(0, 0, captureCanvas.width, captureCanvas.height);
+        const d = imageData.data;
+        for (let p = 0; p < d.length; p += 4) {
+          const dr = Math.abs(d[p] - bgR);
+          const dg = Math.abs(d[p+1] - bgG);
+          const db = Math.abs(d[p+2] - bgB);
+          // 容差30：接近背景色的像素变透明
+          if (dr < 30 && dg < 30 && db < 30) {
+            d[p+3] = 0; // alpha = 0
+          }
+          // 半透明边缘：背景色混合区域也处理
+          else if (dr < 60 && dg < 60 && db < 60 && d[p+3] > 200) {
+            // 计算与背景色的相似度
+            const similarity = 1.0 - (dr + dg + db) / (60 * 3);
+            if (similarity > 0.3) {
+              d[p+3] = Math.round(d[p+3] * (1 - similarity * 0.8));
+            }
+          }
+        }
+        captureCtx.putImageData(imageData, 0, 0);
+        
+        // 简单哈希检测重复帧（只对非透明像素哈希）
+        let hash = 0;
+        for (let j = 0; j < d.length; j += 40) {
+          if (d[j+3] > 10) { // 只看非透明像素
+            hash = ((hash << 5) - hash + d[j]) | 0;
+          }
+        }
+        
+        const dataUrl = captureCanvas.toDataURL('image/png');
+        
+        if (seenHashes.has(hash)) {
+          unchangedCount++;
+          if (unchangedCount >= 3 && frames.length >= 4) {
+            break;
+          }
+        } else {
+          unchangedCount = 0;
+          seenHashes.add(hash);
+          frames.push(dataUrl);
+        }
+        
+        if (frames.length >= 300) break;
+      }
+      
+      player.pause();
+      return frames;
+    }
+    
+    // IPC 通信
+    ipcRenderer.on('convert-swf', async (event, { swfPath, width, height, maxFrames, frameDelay }) => {
+      console.log(`Converting: ${swfPath} (${width}x${height})`);
+      
+      const ok = await init(swfPath, width || 200, height || 200);
+      if (!ok) {
+        ipcRenderer.send('convert-result', { error: 'Failed to load SWF', swfPath });
+        return;
+      }
+      
+      const frames = await detectAndCapture(maxFrames || 200, frameDelay || 100);
+      console.log(`Captured ${frames.length} frames`);
+      
+      ipcRenderer.send('convert-result', { swfPath, frames, width: width || 200, height: height || 200 });
+    });
+    
+    ipcRenderer.send('renderer-ready');
+  </script>
+</body>
+</html>

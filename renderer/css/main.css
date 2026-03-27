@@ -30,6 +30,7 @@ body {
   cursor: grab;
   z-index: 100;
   transition: none;
+  overflow: visible;
 }
 
 #pet-container:active {
@@ -178,18 +179,21 @@ body {
 /* ─── 气泡堆叠容器 ─── */
 .bubble-stack {
   position: absolute;
-  top: 8px;
+  /* 气泡底部对齐宠物顶部，水平居中于宠物 */
+  bottom: 100%;
   left: 50%;
   transform: translateX(-50%);
+  margin-bottom: 2px;
   z-index: 200;
   display: flex;
   flex-direction: column;
   align-items: center;
   transition: opacity 0.3s ease;
   pointer-events: auto;
+  /* 固定宽度，不受 pet-container 的 160px 约束 */
+  width: 232px;
   max-height: 185px;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: visible;
 }
 
 .bubble-stack.hidden {
@@ -201,7 +205,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  max-width: 290px;
+  max-width: 232px;
   min-width: 60px;
 }
 
@@ -213,7 +217,7 @@ body {
   padding: 5px 12px;
   font-size: 11px;
   line-height: 1.4;
-  max-width: 290px;
+  max-width: 232px;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255,255,255,0.16);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -261,7 +265,7 @@ body {
 /* 超长文本自然渐隐，不再突兀显示 ... */
 .bubble-text-content.truncated {
   display: -webkit-box;
-  max-width: 240px;
+  max-width: 192px;
   white-space: normal;
   overflow: hidden;
   -webkit-box-orient: vertical;

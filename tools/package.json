@@ -1,0 +1,17 @@
+{
+  "name": "tools",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@ruffle-rs/ruffle": "^0.2.0-nightly.2026.3.26",
+    "playwright": "^1.58.2",
+    "puppeteer-core": "^24.40.0"
+  }
+}

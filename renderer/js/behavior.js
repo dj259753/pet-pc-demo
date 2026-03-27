@@ -55,6 +55,20 @@ const BehaviorEngine = (() => {
   // ─── 定时器 ───
   let behaviorInterval = null;
   let walkAnimFrame = null;
+  
+  // ─── QC 自主动画定时器 ───
+  let qcIdleTimer = null;
+  const QC_IDLE_MIN_DELAY = 12000;   // 最短12秒
+  const QC_IDLE_MAX_DELAY = 25000;   // 最长25秒
+
+  // 辅助：获取当前心情的 idle/stand 动画名
+  function getIdleAnim() {
+    if (typeof SpriteRenderer !== 'undefined' && SpriteRenderer.qcLoaded) {
+      const mood = (typeof PetState !== 'undefined') ? (PetState.mood || 'peaceful') : 'peaceful';
+      return SpriteRenderer.getQCStand(mood) || 'idle';
+    }
+    return 'idle';
+  }
 
   // ─── 跳跃参数 ───
   let jumpBaseY = 0;
@@ -113,6 +127,9 @@ const BehaviorEngine = (() => {
     document.addEventListener('keydown', resetInteractionTimer);
 
     behaviorInterval = setInterval(behaviorScheduler, 1000);
+
+    // 启动 QC 自主动画调度
+    scheduleQCIdleAnimation();
 
     // 启动后较长延迟再开始走动，大部分时间原地待命
     setTimeout(() => {
@@ -217,7 +234,7 @@ const BehaviorEngine = (() => {
 
   function pauseWalkBriefly() {
     clearInterval(walkStepInterval);
-    SpriteRenderer.setAnimation('idle');
+    SpriteRenderer.setAnimation(getIdleAnim());
     // 停顿 8-20 秒（原来是 1.5-3.5s）
     setTimeout(() => {
       if (currentBehavior === BEHAVIOR.WALKING && !isMouseOver) {
@@ -251,7 +268,7 @@ const BehaviorEngine = (() => {
     cancelAnimationFrame(walkAnimFrame);
     if (currentBehavior === BEHAVIOR.WALKING) {
       currentBehavior = BEHAVIOR.PAUSED;
-      SpriteRenderer.setAnimation('idle');
+      SpriteRenderer.setAnimation(getIdleAnim());
     }
   }
 
@@ -283,7 +300,7 @@ const BehaviorEngine = (() => {
         // 跳完了
         isJumping = false;
         currentBehavior = BEHAVIOR.PAUSED;
-        SpriteRenderer.setAnimation('idle');
+        SpriteRenderer.setAnimation(getIdleAnim());
         updatePosition();
         if (jumpCallback) jumpCallback();
         return;
@@ -371,7 +388,7 @@ const BehaviorEngine = (() => {
     hideWorkTimer();
 
     currentBehavior = BEHAVIOR.PAUSED;
-    SpriteRenderer.setAnimation('idle');
+    SpriteRenderer.setAnimation(getIdleAnim());
     if (typeof PetDiary !== 'undefined') PetDiary.addEntry('work_end', '工作完成！辛苦了～');
 
     // 工作完成增加精力消耗
@@ -404,7 +421,7 @@ const BehaviorEngine = (() => {
     hideWorkTimer();
 
     currentBehavior = BEHAVIOR.PAUSED;
-    SpriteRenderer.setAnimation('idle');
+    SpriteRenderer.setAnimation(getIdleAnim());
 
     // 按工作时长比例提示
     const worked = Date.now() - workStartTime;
@@ -476,7 +493,7 @@ const BehaviorEngine = (() => {
   function wakeUp() {
     if (currentBehavior !== BEHAVIOR.SLEEPING) return;
     currentBehavior = BEHAVIOR.IDLE;
-    SpriteRenderer.setAnimation('idle');
+    SpriteRenderer.setAnimation(getIdleAnim());
     if (typeof PetDiary !== 'undefined') PetDiary.addEntry('wake', '睡醒了，精神满满！');
   }
 
@@ -497,7 +514,7 @@ const BehaviorEngine = (() => {
 
     if (currentBehavior !== BEHAVIOR.SLEEPING && currentBehavior !== BEHAVIOR.JUMPING && currentBehavior !== BEHAVIOR.WORKING) {
       currentBehavior = BEHAVIOR.PAUSED;
-      SpriteRenderer.setAnimation('idle');
+      SpriteRenderer.setAnimation(getIdleAnim());
     }
 
     // 如果尚未激活 → 启动 1s 激活计时器
@@ -626,6 +643,41 @@ const BehaviorEngine = (() => {
         }
       }, 8000);
     }
+  }
+
+  // ─── QC 自主动画调度 ───
+  function scheduleQCIdleAnimation() {
+    const delay = QC_IDLE_MIN_DELAY + Math.random() * (QC_IDLE_MAX_DELAY - QC_IDLE_MIN_DELAY);
+    qcIdleTimer = setTimeout(() => {
+      playQCIdleAnimation();
+      scheduleQCIdleAnimation();
+    }, delay);
+  }
+
+  function playQCIdleAnimation() {
+    if (currentBehavior !== BEHAVIOR.IDLE && currentBehavior !== BEHAVIOR.PAUSED) return;
+    if (isMouseOver) return;
+    if (typeof SpriteRenderer === 'undefined' || !SpriteRenderer.qcLoaded) return;
+
+    const mood = (typeof PetState !== 'undefined') ? (PetState.mood || 'peaceful') : 'peaceful';
+    const playAnim = SpriteRenderer.getQCPlay(mood);
+    if (!playAnim) return;
+
+    SpriteRenderer.loadQCSheet(playAnim).then((img) => {
+      if (!img) return;
+      if (currentBehavior !== BEHAVIOR.IDLE && currentBehavior !== BEHAVIOR.PAUSED) return;
+      if (isMouseOver) return;
+
+      currentBehavior = BEHAVIOR.PAUSED;
+      SpriteRenderer.setAnimation(playAnim);
+
+      // 播完回到 Stand（最多 8 秒）
+      setTimeout(() => {
+        const stand = SpriteRenderer.getQCStand(mood);
+        SpriteRenderer.setAnimation(stand || 'idle');
+        currentBehavior = BEHAVIOR.IDLE;
+      }, Math.min(8000, 250 * 30));
+    });
   }
 
   return {

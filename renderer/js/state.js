@@ -32,8 +32,18 @@ const PetState = (() => {
     ERROR: 'error',
   };
 
+  // ─── 心情枚举（QC 5级情绪） ───
+  const MOODS = {
+    HAPPY: 'happy',
+    PEACEFUL: 'peaceful',
+    UPSET: 'upset',
+    SAD: 'sad',
+    PROSTRATE: 'prostrate',
+  };
+
   let currentState = STATES.IDLE;
-  let stateLockedUntil = 0; // 状态锁定时间戳（动画播放期间不切换）
+  let currentMood = MOODS.PEACEFUL;  // 默认心情：平静
+  let stateLockedUntil = 0;
 
   // ─── 数值衰减配置 ───
   const DECAY_RATES = {
@@ -101,6 +111,31 @@ const PetState = (() => {
     } else {
       setState(STATES.IDLE);
     }
+    // 同步更新心情
+    updateMood();
+  }
+
+  // ─── 心情计算（QC 5级情绪） ───
+  function updateMood() {
+    const { hunger, clean, energy } = stats;
+    const avg = (hunger + clean + energy) / 3;
+    let newMood;
+
+    if (hunger <= 10 || clean <= 10 || energy <= 10) {
+      newMood = MOODS.SAD;
+    } else if (avg <= 30) {
+      newMood = MOODS.UPSET;
+    } else if (avg >= 75 && hunger >= 60 && clean >= 60 && energy >= 60) {
+      newMood = MOODS.HAPPY;
+    } else {
+      newMood = MOODS.PEACEFUL;
+    }
+
+    if (newMood !== currentMood) {
+      const old = currentMood;
+      currentMood = newMood;
+      emit('mood-change', { mood: newMood, old });
+    }
   }
 
   // ─── 喂食 ───
@@ -166,7 +201,9 @@ const PetState = (() => {
     stats,
     inventory,
     STATES,
+    MOODS,
     get state() { return currentState; },
+    get mood() { return currentMood; },
     on,
     emit,
     setStat,
@@ -178,5 +215,6 @@ const PetState = (() => {
     play,
     forceWorking,
     autoState,
+    updateMood,
   };
 })();

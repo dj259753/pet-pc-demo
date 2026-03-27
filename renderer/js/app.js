@@ -97,7 +97,15 @@
     // 18. 初始化 AI 驱动系统（性格 → 记忆 → 大脑 → 主动说话）
     if (typeof Personality !== 'undefined') Personality.init();
     if (typeof PetMemory !== 'undefined') PetMemory.init();
-    if (typeof AIBrain !== 'undefined') AIBrain.init();
+    if (typeof AIBrain !== 'undefined') {
+      AIBrain.init();
+      // 流式输出：边生成边实时更新气泡文字
+      if (AIBrain.onStreamingReply) {
+        AIBrain.onStreamingReply((partialText) => {
+          BubbleSystem.updateStreamingBubble(partialText);
+        });
+      }
+    }
     if (typeof ProactiveChat !== 'undefined') ProactiveChat.init();
 
     // 19. 初始化语音模式（Cmd+K 按住说话）
@@ -291,6 +299,13 @@
       }
     });
 
+    // ─── realtime 模式：每句 VAD 分段送出后，立即清空字幕，准备显示下一句 ───
+    if (VoiceMode.onSegment) {
+      VoiceMode.onSegment(() => {
+        BubbleSystem.hideSubtitle();
+      });
+    }
+
     // ─── 开始录音 ───
     VoiceMode.onStart(() => {
       console.log('🎤 进入聆听模式 (腾讯云 ASR)');
@@ -340,7 +355,12 @@
       BubbleSystem.hideSubtitle();
       // 隐藏语音识别气泡（旧版兼容）
       BubbleSystem.hideVoiceRecognizing();
-      BubbleSystem.hide();
+
+      // realtime 模式下不清空气泡（"我在听呢"要保留，让用户知道还在聆听）
+      // single 模式下才清空
+      if (!VoiceMode.isRecording || VoiceMode.mode !== VoiceMode.MODE_REALTIME) {
+        BubbleSystem.hide();
+      }
 
       if (!text || text.trim().length === 0) {
         // 没有有效内容，恢复正常
@@ -351,7 +371,8 @@
       }
 
       // 语音识别结果送入 AI 对话（带语音标记）
-      handleVoiceMessage(text.trim());
+      // realtime 模式下用队列串行处理，避免并发互相覆盖
+      enqueueVoiceMessage(text.trim());
     });
 
     // ─── 错误处理 ───
@@ -832,8 +853,29 @@
     });
   }
 
+  // ─── 语音消息队列（realtime 模式串行处理，避免并发覆盖状态） ───
+  const voiceMessageQueue = [];
+  let voiceQueueProcessing = false;
+
+  function enqueueVoiceMessage(text) {
+    voiceMessageQueue.push(text);
+    if (!voiceQueueProcessing) {
+      processVoiceQueue();
+    }
+  }
+
+  async function processVoiceQueue() {
+    if (voiceQueueProcessing || voiceMessageQueue.length === 0) return;
+    voiceQueueProcessing = true;
+    while (voiceMessageQueue.length > 0) {
+      const text = voiceMessageQueue.shift();
+      await handleVoiceMessage(text);
+    }
+    voiceQueueProcessing = false;
+  }
+
   // ─── 处理语音对讲消息（ASR 结果 → 对话 + AI 回复） ───
-  function handleVoiceMessage(text) {
+  async function handleVoiceMessage(text) {
     SoundEngine.click();
 
     // 通知互动系统
@@ -856,37 +898,39 @@
       PetMemory.addEvent('voice_chat', `语音对讲: "${text.substring(0, 20)}"`);
     }
 
-    // 异步获取回复
-    getQuickReply(text).then(reply => {
-      if (!reply) {
-        enterOfflineSleep('没网了，我先睡着了。连上网再继续语音对讲。');
-        ChatSystem.addLine('[系统] 无网络或模型不可用，宠物已睡眠', 'system');
-        return;
-      }
-      PetState.setState(PetState.STATES.TALKING, 3000);
-      SpriteRenderer.setAnimation('talking');
-      BubbleSystem.showAIReply(reply);
-      SoundEngine.aiReply();
-      ChatSystem.addLine(reply, 'ai');
+    // 异步获取回复（流式输出：getQuickReply → chat() → 边生成边通过 updateStreamingBubble 更新气泡）
+    const reply = await getQuickReply(text);
+    if (!reply) {
+      enterOfflineSleep('没网了，我先睡着了。连上网再继续语音对讲。');
+      ChatSystem.addLine('[系统] 无网络或模型不可用，宠物已睡眠', 'system');
+      return;
+    }
+    PetState.setState(PetState.STATES.TALKING, 3000);
+    SpriteRenderer.setAnimation('talking');
+    BubbleSystem.showAIReply(reply);
+    SoundEngine.aiReply();
+    ChatSystem.addLine(reply, 'ai');
 
-      if (typeof PetMemory !== 'undefined') {
-        PetMemory.addDialogue('assistant', reply);
-      }
+    if (typeof PetMemory !== 'undefined') {
+      PetMemory.addDialogue('assistant', reply);
+    }
 
-      if (typeof AIBrain !== 'undefined') {
-        const convo = `用户(语音): ${text}\n宠物: ${reply}`;
-        AIBrain.summarizeForMemory(convo).then(memories => {
-          if (memories && typeof PetMemory !== 'undefined') {
-            memories.forEach(m => PetMemory.addImportantConversation(m));
-          }
-        });
-      }
+    if (typeof AIBrain !== 'undefined') {
+      const convo = `用户(语音): ${text}\n宠物: ${reply}`;
+      AIBrain.summarizeForMemory(convo).then(memories => {
+        if (memories && typeof PetMemory !== 'undefined') {
+          memories.forEach(m => PetMemory.addImportantConversation(m));
+        }
+      });
+    }
 
+    // realtime 模式下不 resume（保持聆听态），single 模式才恢复
+    if (!VoiceMode.isRecording || VoiceMode.mode !== VoiceMode.MODE_REALTIME) {
       setTimeout(() => {
         PetState.autoState();
         BehaviorEngine.resume();
       }, 3000);
-    });
+    }
   }
 
   // ─── 快捷对话的多轮历史（保留最近 10 轮） ───

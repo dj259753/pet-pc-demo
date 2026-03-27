@@ -311,23 +311,72 @@ const AIBrain = (() => {
     }
   }
 
+  // ─── 流式回复回调（外部注册，用于实时更新气泡） ───
+  let onStreamingReplyCallback = null;
+  function onStreamingReply(cb) { onStreamingReplyCallback = cb; }
+
   /**
-   * 对话模式：支持多轮历史
+   * 解析 SSE 流，逐 token 累积并回调
+   */
+  async function readStream(res) {
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let accumulated = '';
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // 按行解析 SSE
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // 最后一行可能不完整，留到下次
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed === 'data: [DONE]') continue;
+        if (!trimmed.startsWith('data:')) continue;
+        try {
+          const json = JSON.parse(trimmed.slice(5).trim());
+          const delta = json?.choices?.[0]?.delta?.content || '';
+          if (delta) {
+            accumulated += delta;
+            if (onStreamingReplyCallback) onStreamingReplyCallback(accumulated);
+          }
+        } catch {}
+      }
+    }
+    return accumulated.trim();
+  }
+
+  /**
+   * 对话模式：支持多轮历史，流式输出
    * @param {string} userText - 用户输入
    * @param {Array} history - 对话历史
    * @returns {Promise<string>}
    */
   async function chat(userText, history = [], options = {}) {
-    const prompt = buildPrompt('conversation', {
-      constraint: '自然口语化回复，30-80字，信息明确，少用或不用emoji',
-    });
+    // ── 精简版 system prompt（对话模式不需要大量状态/记忆信息，减少 token 降延迟）
+    const personality = typeof Personality !== 'undefined' ? Personality : null;
+    const now = new Date();
+    const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+    let prompt = `你是桌面宠物"QQ企鹅"，定位是可靠的桌面协作伙伴。表达风格友好、清晰、务实，不要装可爱过头。\n`;
+    if (personality) {
+      const p = personality.getCurrent();
+      prompt += `性格：${p.mbti}，${p.speakStyle}\n`;
+    }
+    prompt += `偶尔流露一点小情绪或小关心，但不啰嗦；语气自然，像个熟悉的伙伴，不是客服。\n`;
+    prompt += `当前时间：${weekdays[now.getDay()]} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}（${getTimePeriod(now.getHours())}）\n`;
+    prompt += `回复要求：自然口语化，30-80字，信息明确，少用 emoji。只输出回复本身，不加前缀。\n`;
 
     const messages = [
       { role: 'system', content: prompt },
     ];
 
-    // 追加历史
-    const recentHistory = history.slice(-20);
+    // 追加历史（最近 8 条，减少 token）
+    const recentHistory = history.slice(-8);
     for (const msg of recentHistory) {
       messages.push({
         role: msg.role,
@@ -383,13 +432,15 @@ const AIBrain = (() => {
       headers['Authorization'] = `Bearer ${API_KEY}`;
     }
 
+    const bodyBase = { model: MODEL, messages, temperature: 0.85, stream: true };
+
     let res = await fetch(API_URL, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ model: MODEL, messages, temperature: 0.85 }),
+      body: JSON.stringify(bodyBase),
     });
 
-    // 某些模型不支持 image_url 内容，自动降级为纯文本重试
+    // 某些模型不支持 image_url，自动降级为纯文本重试
     if (!res.ok && useVisionPayload) {
       const fallbackMessages = messages.slice(0, -1);
       fallbackMessages.push({
@@ -399,7 +450,7 @@ const AIBrain = (() => {
       res = await fetch(API_URL, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ model: MODEL, messages: fallbackMessages, temperature: 0.85 }),
+        body: JSON.stringify({ ...bodyBase, messages: fallbackMessages }),
       });
     }
 
@@ -410,8 +461,8 @@ const AIBrain = (() => {
       throw new Error(`API ${res.status}: ${errText.substring(0, 100)}`);
     }
 
-    const data = await res.json();
-    const reply = extractReply(data);
+    // 流式读取
+    const reply = await readStream(res);
     if (!reply) throw new Error('AI返回为空');
 
     // 记录到记忆
@@ -419,7 +470,7 @@ const AIBrain = (() => {
       PetMemory.addEvent('chat', `和主人聊天: "${userText.substring(0, 20)}${userText.length > 20 ? '...' : ''}"`);
     }
 
-    return reply.trim();
+    return reply;
   }
 
   /**
@@ -489,6 +540,7 @@ const AIBrain = (() => {
     summarizeForMemory,
     buildPrompt,
     loadAIConfig,
+    onStreamingReply,
     get apiCallsToday() { return apiCallsToday; },
     get dailyMoodKeyword() { return dailyMoodKeyword; },
     get provider() { return AI_PROVIDER; },

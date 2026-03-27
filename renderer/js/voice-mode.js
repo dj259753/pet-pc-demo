@@ -27,6 +27,7 @@ const VoiceMode = (() => {
   let onErrorCallback = null;
   let onStreamingCallback = null;
   let onModeChangeCallback = null;
+  let onSegmentCallback = null;   // realtime 模式：每次 VAD 分段完成后触发（用于清空字幕）
 
   // ─── 模式 ───
   const MODE_SINGLE = 'single';
@@ -201,15 +202,16 @@ const VoiceMode = (() => {
     isRecording = false;
     isBusy = true;
 
+    // 立即通知 UI 状态变更（不等 ASR session 结束），让按钮即时响应
+    if (onStopCallback) onStopCallback({ reason: 'manual-stop' });
+
     try {
       const fullText = await stopAsrSessionAndCollectText();
       if (fullText && onResultCallback) onResultCallback(fullText);
       isBusy = false;
-      if (onStopCallback) onStopCallback({ reason: 'manual-stop' });
     } catch (e) {
       console.error('[Voice] stopRecording error:', e);
       isBusy = false;
-      if (onStopCallback) onStopCallback({ reason: 'manual-stop' });
       if (onErrorCallback) onErrorCallback('transcription-error');
     }
   }
@@ -324,13 +326,31 @@ const VoiceMode = (() => {
   async function finalizeAutoSegment() {
     if (!isRecording || !isSessionRunning || isAutoSegmenting) return;
     isAutoSegmenting = true;
+
+    // 先快照当前流式文本（stop 之前拿，stop 后主进程会重置）
+    const snapshotText = (finalText || currentText || '').trim();
+
     try {
-      const text = await stopAsrSessionAndCollectText();
-      const validText = (text || '').trim();
-      if (segmentHasSpeech && validText && onResultCallback) {
-        onResultCallback(validText);
+      // 标记 session 已停止，阻止 volume 回调继续触发 VAD
+      isSessionRunning = false;
+      currentText = '';
+      finalText = '';
+
+      // 等 stop 真正完成（quick 模式：不等 ASR 最终结果，立刻关闭 WebSocket）
+      // 这样 asr-start 不会被 asr-stop 的 3 秒等待阻塞
+      await window.electronAPI.asrStop({ quick: true });
+
+      // 有效文本送出
+      if (segmentHasSpeech && snapshotText && onResultCallback) {
+        onResultCallback(snapshotText);
       }
+
+      // 通知外部清空字幕
+      if (onSegmentCallback) onSegmentCallback(snapshotText);
+
       resetVadState();
+
+      // 重启新 session，继续监听下一句
       if (isRecording) {
         await new Promise(r => setTimeout(r, AUTO_RESTART_DELAY_MS));
         await startAsrSession();
@@ -359,6 +379,7 @@ const VoiceMode = (() => {
   function onStop(cb) { onStopCallback = cb; }
   function onError(cb) { onErrorCallback = cb; }
   function onStreaming(cb) { onStreamingCallback = cb; }
+  function onSegment(cb) { onSegmentCallback = cb; }
 
   return {
     init,
@@ -370,6 +391,7 @@ const VoiceMode = (() => {
     onStop,
     onError,
     onStreaming,
+    onSegment,
     onModeChange,
     setMode,
     setNoiseLevel,
