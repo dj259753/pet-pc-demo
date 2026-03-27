@@ -84,6 +84,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   delegateToWorkBuddy: (payload) => ipcRenderer.invoke('workbuddy-delegate', payload),
   checkUpdatesNow: () => ipcRenderer.invoke('check-updates-now'),
   onUpdateAvailable: (callback) => ipcRenderer.on('update-available', (_, data) => callback(data)),
+  onUpdateProgress: (callback) => ipcRenderer.on('update-progress', (_, data) => callback(data)),
 
   // ─── 语音模式 ───
   notifyVoiceStart: () => ipcRenderer.send('voice-mode-start'),

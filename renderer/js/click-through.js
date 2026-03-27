@@ -13,7 +13,7 @@ const ClickThrough = (() => {
   // 需要响应交互的元素选择器列表
   const INTERACTIVE_SELECTORS = [
     '#pet-container',
-    '#hover-panel',
+    '#hover-panel.visible',          // 只有显示时才阻止穿透
     '#bubble-stack:not(.hidden)',
     '#quick-chat:not(.hidden)',
     '#start-menu:not(.hidden)',

@@ -275,7 +275,10 @@
 
     <!-- Tab 栏 -->
     <div class="skills-tabs">
-      <button class="tab-btn active" id="tab-installed" data-tab="installed">
+      <button class="tab-btn active" id="tab-featured" data-tab="featured">
+        ⭐ 推荐
+      </button>
+      <button class="tab-btn" id="tab-installed" data-tab="installed">
         ✅ 已安装 <span class="tab-badge" id="badge-installed">0</span>
       </button>
       <button class="tab-btn" id="tab-store" data-tab="store">
@@ -287,8 +290,13 @@
       <input type="text" id="search-input" placeholder="🔍 搜索技能...">
     </div>
 
+    <!-- 推荐 Tab -->
+    <div class="skills-list" id="list-featured">
+      <div class="loading-state"><span class="spin">⏳</span> 加载中...</div>
+    </div>
+
     <!-- 已安装 Tab -->
-    <div class="skills-list" id="list-installed">
+    <div class="skills-list hidden" id="list-installed">
       <div class="loading-state"><span class="spin">⏳</span> 加载中...</div>
     </div>
 
@@ -300,9 +308,40 @@
 
   <script>
     let allInstalled = [];
-    let allMarketplace = [];
+    let allMarketplace = [];   // 商店累积列表
     let searchQuery = '';
-    let currentTab = 'installed';
+    let currentTab = 'featured';  // 默认推荐Tab
+    let searchDebounceTimer = null;
+
+    // ─── 分页状态 ───
+    let storePage = 1;
+    let storeHasMore = true;
+    let storeLoading = false;
+    let storeKeyword = '';
+
+    // ─── 推荐列表（硬编码，可扩展） ───
+    const FEATURED_SLUGS = [
+      // ── 腾讯生态 ──
+      { id: 'tencent-docs',          displayName: '腾讯文档',         emoji: '📄', desc: '提供完整的腾讯文档操作能力，支持创建、编辑、协作等全链路功能' },
+      { id: 'tencent-meeting-skill', displayName: '腾讯会议',         emoji: '📹', desc: '腾讯会议全流程管理，创建/查询会议、发送邀请、管理参会者' },
+      { id: 'tencent-news',          displayName: '腾讯新闻',         emoji: '📰', desc: '获取腾讯新闻热点资讯，支持分类浏览、关键词搜索、文章摘要' },
+      // ── 邮件 ──
+      { id: 'qq-mail-monitor',       displayName: 'QQ邮箱监控',       emoji: '📬', desc: 'QQ邮箱自动监控，支持定时检查新邮件、TTS语音播报提醒、邮件收发' },
+      { id: 'email-management',      displayName: '邮件管理',         emoji: '✉️',  desc: '统一邮件收发管理，自动分类、摘要、回复草稿生成' },
+      { id: 'email-daily-summary',   displayName: '智能体邮箱',       emoji: '🤖', desc: '自动登录邮箱（Gmail/Outlook/QQ Mail等）生成每日邮件摘要和重要提醒' },
+      // ── Apple & macOS ──
+      { id: 'apple-notes',           displayName: 'Apple 备忘录',     emoji: '🍎', desc: '读写 Apple Notes，创建、搜索、更新备忘录内容，支持文件夹管理' },
+      { id: 'macos-gui-automation',  displayName: 'macOS 界面自动化', emoji: '🖱️', desc: '通过 AppleScript/osascript 自动化 macOS GUI 操作，控制窗口、菜单、应用' },
+      // ── Office 套件 ──
+      { id: 'microsoft-excel',       displayName: 'Excel 文件处理',   emoji: '📊', desc: '读写 Excel 文件，支持公式计算、数据透视表、图表生成' },
+      { id: 'powerpoint-pptx',       displayName: 'PPT 演示文稿',     emoji: '📑', desc: '创建和编辑 PowerPoint 演示文稿，支持模板、动画、图表' },
+      // ── 社交媒体 ──
+      { id: 'xhs-cn',                displayName: '小红书',           emoji: '📕', desc: '小红书全链路运营：内容创作、笔记发布、搜索浏览、互动评论、数据分析' },
+      // ── 浏览器 & 工具 ──
+      { id: 'browser-use',           displayName: 'Browser Use',      emoji: '🌐', desc: '自动化浏览器交互，网页测试、表单填充、截图和数据提取' },
+      { id: 'computer-use',          displayName: 'Computer Use',     emoji: '🖥️', desc: '无头Linux桌面完整操作，支持Xvfb+XFCE虚拟桌面与xdotool自动化控制' },
+      { id: 'find-skills',           displayName: 'Find Skills',      emoji: '🔍', desc: '帮助发现和安装适合当前任务的 skill，智能推荐最匹配的能力扩展' },
+    ];
 
     // ─── Tab 切换 ───
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -310,9 +349,10 @@
         currentTab = btn.dataset.tab;
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
+        document.getElementById('list-featured').classList.toggle('hidden', currentTab !== 'featured');
         document.getElementById('list-installed').classList.toggle('hidden', currentTab !== 'installed');
         document.getElementById('list-store').classList.toggle('hidden', currentTab !== 'store');
-        render();
+        if (currentTab === 'installed') renderInstalled();
       });
     });
 
@@ -325,33 +365,121 @@
       return String(str || '').replace(/\s+/g, ' ').trim() || fallback;
     }
 
-    // ─── 加载数据 ───
-    async function loadSkills() {
+    // ─── 渲染推荐 Tab ───
+    function renderFeatured() {
+      const container = document.getElementById('list-featured');
+      container.innerHTML = '';
+      const installedIds = new Set([
+        ...allInstalled.map(s => s.id),
+        ...allInstalled.map(s => s.name),
+      ]);
+      FEATURED_SLUGS.forEach(fs => {
+        const isInstalled = installedIds.has(fs.id);
+        const skill = { ...fs, source: 'skillhub-store', installed: isInstalled };
+        container.appendChild(createSkillItem(skill));
+      });
+    }
+
+    // ─── 初始加载（第1页，同时拿已安装） ───
+    async function loadSkills(keyword = '') {
+      const isNewSearch = keyword !== storeKeyword;
+      storeKeyword = keyword;
+
+      if (isNewSearch) {
+        storePage = 1;
+        storeHasMore = true;
+        allMarketplace = [];
+      }
+
+      await fetchStorePage(keyword, 1, /* reset= */ true);
+    }
+
+    // ─── 拉一页商店数据 ───
+    async function fetchStorePage(keyword, page, reset = false) {
+      if (storeLoading) return;
+      storeLoading = true;
+
+      const storeContainer = document.getElementById('list-store');
+
+      if (reset) {
+        storeContainer.innerHTML = '<div class="loading-state"><span class="spin">⏳</span> ' + (keyword ? '搜索中...' : '加载中...') + '</div>';
+      } else {
+        const loadingEl = document.createElement('div');
+        loadingEl.className = 'loading-state loading-more';
+        loadingEl.id = 'load-more-indicator';
+        loadingEl.innerHTML = '<span class="spin">⏳</span> 加载更多...';
+        storeContainer.appendChild(loadingEl);
+      }
+
       try {
-        const data = await window.skillsAPI.getSkills();
-        allInstalled = data.installed || [];
+        const data = await window.skillsAPI.getSkills(keyword, page);
 
-        // 商店按 score（下载量/好评）降序排列，API 已按 score 返回，此处再确保排序
-        allMarketplace = (data.marketplace || []).sort((a, b) => {
-          const sa = Number(a.score || a.downloads || a.stars || 0);
-          const sb = Number(b.score || b.downloads || b.stars || 0);
-          return sb - sa;
-        });
+        if (page === 1 && data.installed) {
+          allInstalled = data.installed;
+          document.getElementById('badge-installed').textContent = allInstalled.length;
+          renderInstalled();
+          renderFeatured();  // 已安装状态变了，同步更新推荐Tab的按钮
+        }
 
-        // 更新 badge
-        document.getElementById('badge-installed').textContent = allInstalled.length;
-        document.getElementById('badge-store').textContent = allMarketplace.length;
+        const newItems = data.marketplace || [];
+        storeHasMore = !!data.hasMore;
+        storePage = page;
 
-        render();
+        if (reset) {
+          allMarketplace = newItems;
+          storeContainer.innerHTML = '';
+          if (allMarketplace.length === 0) {
+            storeContainer.innerHTML = '<div class="empty-state">' +
+              (keyword ? `没有找到「${escapeHtml(keyword)}」相关技能` : '暂无可用技能') + '</div>';
+          } else {
+            allMarketplace.forEach(skill => storeContainer.appendChild(createSkillItem(skill)));
+            if (storeHasMore) appendLoadMoreSentinel(storeContainer);
+          }
+        } else {
+          document.getElementById('load-more-indicator')?.remove();
+          if (newItems.length > 0) {
+            allMarketplace.push(...newItems);
+            newItems.forEach(skill => storeContainer.appendChild(createSkillItem(skill)));
+          }
+          if (storeHasMore) appendLoadMoreSentinel(storeContainer);
+        }
+
+        document.getElementById('badge-store').textContent = allMarketplace.length + (storeHasMore ? '+' : '');
+
       } catch (e) {
-        console.error('加载 skills 失败:', e);
-        document.getElementById('list-installed').innerHTML = '<div class="empty-state">⚠️ 加载失败，请重试</div>';
-        document.getElementById('list-store').innerHTML = '<div class="empty-state">⚠️ 加载失败，请重试</div>';
+        console.error('加载商店失败:', e);
+        document.getElementById('load-more-indicator')?.remove();
+        if (reset) {
+          storeContainer.innerHTML = '<div class="empty-state">⚠️ 加载失败，请重试</div>';
+        }
+      } finally {
+        storeLoading = false;
       }
     }
 
-    // ─── 过滤 ───
-    function filterSkills(list) {
+    // ─── IntersectionObserver 哨兵（无限滚动） ───
+    let sentinel = null;
+    let sentinelObserver = null;
+
+    function appendLoadMoreSentinel(container) {
+      sentinel?.remove();
+      sentinelObserver?.disconnect();
+
+      sentinel = document.createElement('div');
+      sentinel.style.height = '1px';
+      container.appendChild(sentinel);
+
+      sentinelObserver = new IntersectionObserver(entries => {
+        if (entries[0].isIntersecting && storeHasMore && !storeLoading) {
+          fetchStorePage(storeKeyword, storePage + 1, false);
+        }
+      }, { root: container, threshold: 0 });
+
+      sentinelObserver.observe(sentinel);
+    }
+
+    // ─── 已安装前端过滤 ───
+    function filterInstalled(list) {
       if (!searchQuery) return list;
       const q = searchQuery.toLowerCase();
       return list.filter(s =>
@@ -361,18 +489,14 @@
       );
     }
 
-    // ─── 渲染 ───
-    function render() {
-      renderInstalled();
-      renderStore();
-    }
-
     function renderInstalled() {
       const container = document.getElementById('list-installed');
-      const filtered = filterSkills(allInstalled);
+      const filtered = filterInstalled(allInstalled);
       if (filtered.length === 0) {
         container.innerHTML = '<div class="empty-state">' +
-          (allInstalled.length === 0 ? '还没有安装任何技能<br><span style="font-size:11px;opacity:.6">切换到「商店」Tab 安装</span>' : '没有匹配的技能') +
+          (allInstalled.length === 0
+            ? '还没有安装任何技能<br><span style="font-size:11px;opacity:.6">切换到「商店」Tab 安装</span>'
+            : '没有匹配的技能') +
           '</div>';
         return;
       }
@@ -380,18 +504,7 @@
       filtered.forEach(skill => container.appendChild(createSkillItem(skill)));
     }
 
-    function renderStore() {
-      const container = document.getElementById('list-store');
-      const filtered = filterSkills(allMarketplace);
-      if (filtered.length === 0) {
-        container.innerHTML = '<div class="empty-state">' +
-          (allMarketplace.length === 0 ? '暂无可用技能' : '没有匹配的技能') +
-          '</div>';
-        return;
-      }
-      container.innerHTML = '';
-      filtered.forEach(skill => container.appendChild(createSkillItem(skill)));
-    }
+    function render() { renderInstalled(); }
 
     // ─── 创建单个 skill 项 ───
     function createSkillItem(skill) {
@@ -445,9 +558,8 @@
       try {
         const result = await window.skillsAPI.installSkill(skill.id, skill.source);
         if (result.ok) {
-          // 安装成功后切换到已安装 Tab
-          await loadSkills();
-          document.getElementById('tab-installed').click();
+          // 安装成功：留在原 Tab，刷新数据让按钮变成「已装+配置+卸载」状态
+          await loadSkills(storeKeyword);
         } else {
           if (actionDiv) {
             actionDiv.innerHTML = `<button class="btn-error" title="${escapeHtml(result.error || '安装失败')}">❌ 重试</button>`;
@@ -456,7 +568,7 @@
         }
       } catch (e) {
         console.error('安装失败:', e);
-        await loadSkills();
+        await loadSkills(storeKeyword);
       }
     }
 
@@ -476,14 +588,20 @@
       } catch (e) {
         alert(`卸载失败：${e.message || e}`);
       } finally {
-        await loadSkills();
+        await loadSkills(storeKeyword);
       }
     }
 
-    // ─── 搜索 ───
+    // ─── 搜索（debounce 400ms，重置分页后走后端全量搜索） ───
     document.getElementById('search-input').addEventListener('input', e => {
       searchQuery = e.target.value.trim();
-      render();
+      clearTimeout(searchDebounceTimer);
+      // 已安装 Tab：本地即时过滤
+      renderInstalled();
+      // 商店：debounce 后重置分页重新搜索
+      searchDebounceTimer = setTimeout(() => {
+        loadSkills(searchQuery);
+      }, 400);
     });
 
     // ─── 关闭 ───

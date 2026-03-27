@@ -55,53 +55,23 @@ for anim_name in anim_dirs:
         print(f'  [SKIP] {anim_name}: empty frames after load')
         continue
     
-    # ─── 计算全帧的统一内容边界（取所有帧的并集） ───
-    raw_w, raw_h = frames[0].size
-    global_min_x, global_min_y = raw_w, raw_h
-    global_max_x, global_max_y = 0, 0
-    
-    for frm in frames:
-        bbox = frm.getbbox()  # 非透明像素边界 (left, upper, right, lower)
-        if bbox:
-            global_min_x = min(global_min_x, bbox[0])
-            global_min_y = min(global_min_y, bbox[1])
-            global_max_x = max(global_max_x, bbox[2])
-            global_max_y = max(global_max_y, bbox[3])
-    
-    # 无内容（全透明），跳过
-    if global_max_x <= global_min_x or global_max_y <= global_min_y:
-        print(f'  [SKIP] {anim_name}: all transparent')
-        continue
-    
-    content_w = global_max_x - global_min_x
-    content_h = global_max_y - global_min_y
-    
-    # 添加少量 padding（4%）
-    pad = max(int(max(content_w, content_h) * 0.04), 2)
-    crop_x = max(0, global_min_x - pad)
-    crop_y = max(0, global_min_y - pad)
-    crop_r = min(raw_w, global_max_x + pad)
-    crop_b = min(raw_h, global_max_y + pad)
-    
-    # ─── 裁剪 + 等比放大到 frame_size × frame_size（居中） ───
+    # ─── 直接等比缩放到 frame_size（不裁剪，保持原始比例） ───
     processed_frames = []
+    raw_w, raw_h = frames[0].size
     for frm in frames:
-        # 裁剪到统一边界
-        cropped = frm.crop((crop_x, crop_y, crop_r, crop_b))
-        cw, ch = cropped.size
-        
-        # 等比缩放到 frame_size 内
-        scale = min(frame_size / cw, frame_size / ch)
-        new_w = max(1, int(cw * scale))
-        new_h = max(1, int(ch * scale))
-        scaled = cropped.resize((new_w, new_h), Image.LANCZOS)
-        
-        # 居中放到 frame_size × frame_size 画布
-        canvas = Image.new('RGBA', (frame_size, frame_size), (0, 0, 0, 0))
-        paste_x = (frame_size - new_w) // 2
-        paste_y = (frame_size - new_h) // 2
-        canvas.paste(scaled, (paste_x, paste_y))
-        processed_frames.append(canvas)
+        if raw_w == frame_size and raw_h == frame_size:
+            processed_frames.append(frm)
+        else:
+            # 等比缩放到 frame_size 内，居中放到透明画布
+            scale = min(frame_size / raw_w, frame_size / raw_h)
+            new_w = max(1, int(raw_w * scale))
+            new_h = max(1, int(raw_h * scale))
+            scaled = frm.resize((new_w, new_h), Image.LANCZOS)
+            canvas = Image.new('RGBA', (frame_size, frame_size), (0, 0, 0, 0))
+            paste_x = (frame_size - new_w) // 2
+            paste_y = (frame_size - new_h) // 2
+            canvas.paste(scaled, (paste_x, paste_y))
+            processed_frames.append(canvas)
     
     frames = processed_frames
     

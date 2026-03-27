@@ -431,5 +431,44 @@ const BubbleSystem = (() => {
     if (subtitleTimer) { clearTimeout(subtitleTimer); subtitleTimer = null; }
   }
 
-  return { show, hide, randomBubble, showAIReply, showThinking, hideThinking, showVoiceRecognizing, hideVoiceRecognizing, showSubtitle, hideSubtitle, updateStreamingBubble };
+  // ─── 更新进度气泡（专用，不走节流，实时覆盖更新） ───
+  let updateProgressMsg = null;
+
+  function showUpdateProgress(text) {
+    const display = text.length > MAX_CHARS ? text.substring(0, MAX_CHARS) : text;
+
+    if (updateProgressMsg && updateProgressMsg.el && updateProgressMsg.el.parentNode) {
+      // 直接更新内容，重置计时器
+      updateProgressMsg.textSpan.textContent = display;
+      if (updateProgressMsg.timer) clearTimeout(updateProgressMsg.timer);
+      updateProgressMsg.timer = setTimeout(() => {
+        removeMessage(updateProgressMsg);
+        updateProgressMsg = null;
+      }, 60000);
+      return;
+    }
+
+    // 首次创建
+    hideThinking();
+    const { el, textSpan } = createBubbleEl(display, display, false);
+    el.classList.add('bubble-update-progress');
+
+    while (messages.length >= MAX_VISIBLE) removeMessage(messages[0]);
+    listEl.appendChild(el);
+
+    const msg = { el, textSpan, fullText: display, timer: null };
+    messages.push(msg);
+    updateProgressMsg = msg;
+    textSpan.textContent = display;
+
+    stackEl.classList.remove('hidden');
+    updateFadeStyles();
+
+    msg.timer = setTimeout(() => {
+      removeMessage(msg);
+      updateProgressMsg = null;
+    }, 60000);
+  }
+
+  return { show, hide, randomBubble, showAIReply, showThinking, hideThinking, showVoiceRecognizing, hideVoiceRecognizing, showSubtitle, hideSubtitle, updateStreamingBubble, showUpdateProgress };
 })();

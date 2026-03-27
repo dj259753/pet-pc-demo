@@ -1,8 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('skillsAPI', {
-  // 获取真实 skills 列表（已安装 + 市场可用）
-  getSkills: () => ipcRenderer.invoke('skills-get-list'),
+  // 获取真实 skills 列表（已安装 + 市场可用），支持关键词搜索和分页
+  getSkills: (keyword = '', page = 1) => ipcRenderer.invoke('skills-get-list', { keyword, page }),
 
   // 安装 skill（返回 { ok, error? }）
   installSkill: (skillId, source) => ipcRenderer.invoke('skills-install', { skillId, source }),

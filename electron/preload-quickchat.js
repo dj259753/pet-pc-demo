@@ -12,4 +12,10 @@ contextBridge.exposeInMainWorld('quickChatAPI', {
 
   // 监听用户消息（从主窗口转发的语音文本等）
   onUserMsg: (callback) => ipcRenderer.on('user-msg', (_, { text }) => callback(text)),
+
+  // 打开外部 URL（系统浏览器）
+  openUrl: (url) => ipcRenderer.invoke('open-external-url', url),
+
+  // 打开本地文件/文件夹（Finder / 默认程序）
+  openLocalPath: (filePath) => ipcRenderer.invoke('open-local-path', filePath),
 });

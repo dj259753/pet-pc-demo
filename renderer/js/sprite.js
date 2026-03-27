@@ -28,48 +28,11 @@ const SpriteRenderer = (() => {
   // 格式: { 'sheetName': [ { minX, minY, maxX, maxY, contentW, contentH }, ... ] }
   const frameBounds = {};
 
-  // ─── 动画定义 ───
-  // 每个动画指向一张精灵表 + 帧数 + 速度
-  // 目前只有 idle.png，其他动画暂时复用 idle 的精灵表
-  const ANIM_CONFIG = {
-    idle:         { sheet: 'idle',       frames: 6, speed: 300,  flipX: false, frameW: 128, frameH: 128 },
-    walk_right:   { sheet: 'walk-right', frames: 7, speed: 150,  flipX: false, frameW: 128, frameH: 128 },
-    walk_left:    { sheet: 'walk-left',  frames: 7, speed: 150,  flipX: false, frameW: 128, frameH: 128 },
-    yawning:      { sheet: 'idle', frames: 6, speed: 500,  flipX: false, frameW: 128, frameH: 128 },
-    happy_jump:   { sheet: 'happy',    frames: 6, speed: 150,  flipX: false, frameW: 128, frameH: 128 },
-    coffee_drink: { sheet: 'coffee',     frames: 8, speed: 300,  flipX: false, frameW: 128, frameH: 128 },
-    kick_ball:    { sheet: 'kick-ball',  frames: 6, speed: 200,  flipX: false, frameW: 128, frameH: 128 },
-    rain_wash:    { sheet: 'rain',       frames: 8, speed: 200,  flipX: false, frameW: 128, frameH: 128 },
-    eating:       { sheet: 'eating',   frames: 6, speed: 250,  flipX: false, frameW: 128, frameH: 128 },
-    washing:      { sheet: 'idle',     frames: 6, speed: 200,  flipX: false, frameW: 128, frameH: 128 },
-    happy:        { sheet: 'happy',    frames: 6, speed: 250,  flipX: false, frameW: 128, frameH: 128 },
-    sad:          { sheet: 'idle',     frames: 6, speed: 500,  flipX: false, frameW: 128, frameH: 128 },
-    working:      { sheet: 'working-1', frames: 4, speed: 350,  flipX: false, frameW: 128, frameH: 128 },
-    working_1:    { sheet: 'working-1', frames: 4, speed: 350,  flipX: false, frameW: 128, frameH: 128 },
-    working_2:    { sheet: 'working-2', frames: 7, speed: 300,  flipX: false, frameW: 128, frameH: 128 },
-    thinking:     { sheet: 'idle',     frames: 6, speed: 400,  flipX: false, frameW: 128, frameH: 128 },
-    talking:      { sheet: 'idle',     frames: 6, speed: 200,  flipX: false, frameW: 128, frameH: 128 },
-    sleeping:     { sheet: 'sleeping', frames: 4, speed: 500,  flipX: false, frameW: 128, frameH: 128 },
-    sleeping_lie: { sheet: 'sleeping', frames: 4, speed: 600,  flipX: false, frameW: 128, frameH: 128 },
-    error:        { sheet: 'idle',     frames: 6, speed: 500,  flipX: false, frameW: 128, frameH: 128 },
-  };
+  // ─── 动画定义（旧配置已移除，全部由 QC 动画系统接管） ───
+  const ANIM_CONFIG = {};
 
-  // ─── 需要加载的精灵表文件列表（原版像素风，作为 fallback） ───
-  const SHEET_FILES = {
-    idle: 'sprites/idle.png',
-    'walk-right': 'sprites/walk-right.png',
-    'walk-left': 'sprites/walk-left.png',
-    happy: 'sprites/happy.png',
-    sleeping: 'sprites/sleeping.png',
-    coffee: 'sprites/coffee.png',
-    rain: 'sprites/rain.png',
-    'kick-ball': 'sprites/kick-ball.png',
-    question: 'sprites/question.png',
-    thinking: 'sprites/thinking.png',
-    'working-1': 'sprites/working-1.png',
-    'working-2': 'sprites/working-2.png',
-    eating: 'sprites/eating.png',
-  };
+  // ─── 旧精灵表已移除，保留空配置用于兼容 ───
+  const SHEET_FILES = {};
 
   // ═══════════════════════════════════════════
   //  QC 动画系统 - 从 QQ宠物素材生成的精灵表
@@ -536,16 +499,27 @@ const SpriteRenderer = (() => {
     const fh = config.frameH || FRAME_H;
     const frameIdx = frame % config.frames;
 
-    // 从精灵表中取出该帧（整帧原样绘制，和预览一致）
+    // 从精灵表中取出该帧
     const sx = frameIdx * fw;
     const sy = 0;
 
-    // 在160x160画布中居中绘制整帧（缩小30%）
-    const scale = Math.min(104 / fw, 104 / fh);
-    const drawW = fw * scale;
-    const drawH = fh * scale;
-    const dx = (W - drawW) / 2;
-    const dy = (H - drawH) / 2 + 4;
+    // QC 精灵表 (160×160)：直接1:1绘制，不缩放
+    // 旧精灵表 (128×128)：缩小后居中
+    let drawW, drawH, dx, dy;
+    if (fw >= 160) {
+      // QC 动画：1:1 铺满画布
+      drawW = W;
+      drawH = H;
+      dx = 0;
+      dy = 0;
+    } else {
+      // 旧像素风动画：缩小30%居中
+      const scale = Math.min(104 / fw, 104 / fh);
+      drawW = fw * scale;
+      drawH = fh * scale;
+      dx = (W - drawW) / 2;
+      dy = (H - drawH) / 2 + 4;
+    }
 
     ctx.save();
     ctx.imageSmoothingEnabled = false;
@@ -603,9 +577,9 @@ const SpriteRenderer = (() => {
     }
   }
 
-  // ─── 获取当前动画配置（合并 QC + 原版） ───
+  // ─── 获取当前动画配置（QC 优先，兜底 peaceful-Stand） ───
   function getAnimConfig(animName) {
-    return qcAnimConfig[animName] || ANIM_CONFIG[animName] || ANIM_CONFIG.idle;
+    return qcAnimConfig[animName] || ANIM_CONFIG[animName] || qcAnimConfig['peaceful-Stand'] || { sheet: 'peaceful-Stand', frames: 1, speed: 300, frameW: 160, frameH: 160 };
   }
 
   // ─── 启动 ───

@@ -379,6 +379,17 @@ ipcMain.handle('open-external-url', async (event, url) => {
   }
 });
 
+ipcMain.handle('open-local-path', async (event, filePath) => {
+  try {
+    const target = String(filePath || '').trim().replace(/^~/, os.homedir());
+    const err = await shell.openPath(target);
+    if (err) return { ok: false, error: err };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
 // ═══════════════════════════════════════════
 // AI 配置读取（从 ~/.qq-pet/config/ai-config.json）
 // ═══════════════════════════════════════════
@@ -481,7 +492,7 @@ function syncTokenToUpdateConfig(token) {
     }
     cfg.git_private_token = String(token || '').trim();
     if (!cfg.git_version_url) {
-      cfg.git_version_url = 'https://git.woa.com/api/v4/projects/riojdai%2Fpc-pet-demo/repository/files/release%2Fversion.json/raw?ref=master';
+      cfg.git_version_url = '';
     }
     if (typeof cfg.enabled === 'undefined') cfg.enabled = true;
     if (!cfg.check_interval_minutes) cfg.check_interval_minutes = 60;
@@ -890,7 +901,35 @@ async function checkForUpdatesViaGit(cfg, triggeredBy) {
       }
     } catch {}
     if (lastHash === remoteHash && triggeredBy !== 'manual') {
-      console.log('🔄 远程仓库无变化，跳过更新检查');
+      // hash 没变 → 用上次缓存的 version.json 检查版本号，不重新 clone
+      const cachedVersionFile = path.join(cacheDir, 'repo-checkout', 'release', 'version.json');
+      if (fs.existsSync(cachedVersionFile)) {
+        try {
+          const vd = JSON.parse(fs.readFileSync(cachedVersionFile, 'utf-8'));
+          const rv = String(vd.version || '').trim();
+          if (rv && isVersionNewer(rv, localVersion)) {
+            const notes = normalizeUpdateNotes(vd);
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('update-available', { version: rv, notes });
+            }
+            if (lastNotifiedVersion !== rv) {
+              lastNotifiedVersion = rv;
+              const result = await dialog.showMessageBox({
+                type: 'info', title: '发现新版本',
+                message: `发现新版本 v${rv}，是否立即更新并重启？`,
+                detail: `更新内容：\n${notes}`,
+                buttons: ['立即更新', '稍后'],
+                defaultId: 0, cancelId: 1,
+              });
+              if (result.response === 0) {
+                await installUpdateFromGitSource(cfg.gitRepoUrl, rv, notes);
+              }
+            }
+            return { ok: true, status: 'update-available', localVersion, remoteVersion: rv };
+          }
+        } catch {}
+      }
+      console.log('🔄 远程仓库无变化，已是最新版本');
       return { ok: true, status: 'up-to-date', localVersion, remoteHash };
     }
 
@@ -993,7 +1032,7 @@ async function checkForUpdatesViaGit(cfg, triggeredBy) {
         type: 'warning',
         title: '检查更新失败',
         message: `无法检查更新：${e.message}`,
-        detail: '请确认 SSH Key 已正确配置，且网络可以访问 git@git.woa.com',
+        detail: '请确认 SSH Key 已正确配置，且网络可以访问 git@github.com',
         buttons: ['知道了'],
       }).catch(() => {});
     }
@@ -2625,23 +2664,33 @@ async function fetchSkillhubStore({ keyword = '', page = 1, pageSize = 50, sortB
   }
 }
 
-// Skills 列表请求（已安装 + 商店推荐）
-ipcMain.handle('skills-get-list', async () => {
-  // 1. 读本地已安装
-  const installed = getInstalledSkills();
+// Skills 列表请求（已安装 + 商店推荐/搜索）
+ipcMain.handle('skills-get-list', async (event, { keyword = '', page = 1 } = {}) => {
+  const PAGE_SIZE = 50;
+
+  // 1. 读本地已安装（仅第一页返回，避免重复）
+  const installed = page === 1 ? getInstalledSkills() : [];
   const installedSlugs = new Set([
-    ...installed.map(s => s.id),
-    ...installed.map(s => s.name),
-    ...installed.map(s => s.displayName),
+    ...getInstalledSkills().map(s => s.id),
+    ...getInstalledSkills().map(s => s.name),
+    ...getInstalledSkills().map(s => s.displayName),
   ]);
 
-  // 2. 从 lightmake.site 拉商店推荐（Top 50），过滤掉已安装的
-  const { skills: storeSkills } = await fetchSkillhubStore({ sortBy: 'score', pageSize: 50 });
+  // 2. 从 lightmake.site 分页拉商店数据
+  const { skills: storeSkills, total } = await fetchSkillhubStore({
+    keyword,
+    sortBy: 'score',
+    page,
+    pageSize: PAGE_SIZE,
+  });
   const marketplace = storeSkills.filter(
     s => !installedSlugs.has(s.id) && !installedSlugs.has(s.name) && !installedSlugs.has(s.displayName)
   );
 
-  return { installed, marketplace };
+  // hasMore：本页拉到了满 PAGE_SIZE 条（可能还有下一页）
+  const hasMore = storeSkills.length >= PAGE_SIZE;
+
+  return { installed, marketplace, hasMore, page };
 });
 
 ipcMain.handle('skills-get-auth-status', async () => {

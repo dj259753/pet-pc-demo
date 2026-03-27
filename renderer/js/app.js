@@ -94,6 +94,15 @@
       });
     }
 
+    // 安装进度通知（实时气泡显示，避免用户不知道在安装）
+    if (window.electronAPI && window.electronAPI.onUpdateProgress) {
+      window.electronAPI.onUpdateProgress(({ title, message }) => {
+        const text = message ? `${title}\n${message}` : title;
+        // 用长时间气泡持续显示（覆盖旧的），进度完成前不消失
+        BubbleSystem.showUpdateProgress(text);
+      });
+    }
+
     // 18. 初始化 AI 驱动系统（性格 → 记忆 → 大脑 → 主动说话）
     if (typeof Personality !== 'undefined') Personality.init();
     if (typeof PetMemory !== 'undefined') PetMemory.init();
@@ -639,31 +648,30 @@
 
     // ─── Skill 配置对话引导 ───
     if (window.electronAPI && window.electronAPI.onSkillConfigureChat) {
-      window.electronAPI.onSkillConfigureChat(({ skillId, skillName, skillDesc, skillSource }) => {
+      window.electronAPI.onSkillConfigureChat(({ skillId, skillName }) => {
         const displayName = skillName || skillId || '这个技能';
 
-        // 企鹅先冒泡提示
+        // 企鹅先冒泡提示，进入思考动画
         BubbleSystem.show(`好的，我来查一下「${displayName}」怎么用～`, 3000);
         SpriteRenderer.setAnimation('thinking');
         SoundEngine.click();
 
-        // 构造模拟用户消息：让 AI Brain 去真正查阅 skill 并回答
+        // 模拟用户发送的消息文本
         const userQuery = `教我怎么使用「${displayName}」这个 skill，包括如何配置和触发方式`;
 
-        // 打开对话窗口，然后模拟用户发送消息
+        // 打开对话窗口，然后模拟用户发消息 + 触发 AI 真正处理
         setTimeout(() => {
           if (window.electronAPI && window.electronAPI.openQuickChat) {
             window.electronAPI.openQuickChat();
           }
-          // 稍等窗口就绪，再把消息同步显示到对话窗口 + 触发 AI 处理
           setTimeout(() => {
-            // 在对话窗口显示用户气泡（sendQuickChatUserMsg → quick-chat.html 的 onUserMsg）
+            // 在对话窗口显示用户气泡
             if (window.electronAPI && window.electronAPI.sendQuickChatUserMsg) {
               window.electronAPI.sendQuickChatUserMsg(userQuery);
             }
-            // 同时触发 AI Brain 真正处理这条消息
+            // 触发 AI Brain 真正去查阅 skill 并回答
             handleQuickChatMessage(userQuery);
-          }, 420);
+          }, 500);
         }, 600);
       });
     }

@@ -1,7 +1,7 @@
 {
   "Bury": {
     "sheet": "Bury",
-    "frames": 72,
+    "frames": 68,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -10,7 +10,7 @@
   },
   "Clean1": {
     "sheet": "Clean1",
-    "frames": 63,
+    "frames": 18,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -73,7 +73,7 @@
   },
   "Eat2": {
     "sheet": "Eat2",
-    "frames": 14,
+    "frames": 13,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -82,7 +82,7 @@
   },
   "Enter1": {
     "sheet": "Enter1",
-    "frames": 82,
+    "frames": 89,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -100,7 +100,7 @@
   },
   "Enter3": {
     "sheet": "Enter3",
-    "frames": 116,
+    "frames": 114,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -109,7 +109,7 @@
   },
   "Etoj": {
     "sheet": "Etoj",
-    "frames": 20,
+    "frames": 15,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -118,7 +118,7 @@
   },
   "Exit1": {
     "sheet": "Exit1",
-    "frames": 42,
+    "frames": 6,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -127,7 +127,7 @@
   },
   "Exit2": {
     "sheet": "Exit2",
-    "frames": 85,
+    "frames": 82,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -136,7 +136,7 @@
   },
   "Exit3": {
     "sheet": "Exit3",
-    "frames": 55,
+    "frames": 53,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -145,7 +145,7 @@
   },
   "Exit4": {
     "sheet": "Exit4",
-    "frames": 66,
+    "frames": 64,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -154,7 +154,7 @@
   },
   "First": {
     "sheet": "First",
-    "frames": 59,
+    "frames": 57,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -163,7 +163,7 @@
   },
   "Hide_left": {
     "sheet": "Hide_left",
-    "frames": 15,
+    "frames": 14,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -172,7 +172,7 @@
   },
   "Hide_right": {
     "sheet": "Hide_right",
-    "frames": 14,
+    "frames": 15,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -271,7 +271,7 @@
   },
   "happy-interact-010": {
     "sheet": "happy-interact-010",
-    "frames": 36,
+    "frames": 34,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -280,7 +280,7 @@
   },
   "happy-interact-BE1": {
     "sheet": "happy-interact-BE1",
-    "frames": 14,
+    "frames": 11,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -316,7 +316,7 @@
   },
   "happy-interact-BE5": {
     "sheet": "happy-interact-BE5",
-    "frames": 12,
+    "frames": 11,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -379,7 +379,7 @@
   },
   "happy-interact-LF1": {
     "sheet": "happy-interact-LF1",
-    "frames": 24,
+    "frames": 25,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -397,7 +397,7 @@
   },
   "happy-interact-LF3": {
     "sheet": "happy-interact-LF3",
-    "frames": 51,
+    "frames": 52,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -415,7 +415,7 @@
   },
   "happy-interact-LH1": {
     "sheet": "happy-interact-LH1",
-    "frames": 12,
+    "frames": 11,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -424,7 +424,7 @@
   },
   "happy-interact-LH2": {
     "sheet": "happy-interact-LH2",
-    "frames": 7,
+    "frames": 9,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -433,7 +433,7 @@
   },
   "happy-interact-LH3": {
     "sheet": "happy-interact-LH3",
-    "frames": 52,
+    "frames": 54,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -442,7 +442,7 @@
   },
   "happy-interact-M1": {
     "sheet": "happy-interact-M1",
-    "frames": 17,
+    "frames": 18,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -451,7 +451,7 @@
   },
   "happy-interact-M2": {
     "sheet": "happy-interact-M2",
-    "frames": 20,
+    "frames": 22,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -478,7 +478,7 @@
   },
   "happy-interact-M5": {
     "sheet": "happy-interact-M5",
-    "frames": 44,
+    "frames": 43,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -487,7 +487,7 @@
   },
   "happy-interact-RF1": {
     "sheet": "happy-interact-RF1",
-    "frames": 15,
+    "frames": 7,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -505,7 +505,7 @@
   },
   "happy-interact-RH1": {
     "sheet": "happy-interact-RH1",
-    "frames": 21,
+    "frames": 22,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -532,7 +532,7 @@
   },
   "happy-interact-RH4": {
     "sheet": "happy-interact-RH4",
-    "frames": 48,
+    "frames": 52,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -550,7 +550,7 @@
   },
   "happy-play-P1": {
     "sheet": "happy-play-P1",
-    "frames": 67,
+    "frames": 25,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -568,7 +568,7 @@
   },
   "happy-play-P11": {
     "sheet": "happy-play-P11",
-    "frames": 13,
+    "frames": 12,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -577,7 +577,7 @@
   },
   "happy-play-P12": {
     "sheet": "happy-play-P12",
-    "frames": 35,
+    "frames": 30,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -586,7 +586,7 @@
   },
   "happy-play-P13": {
     "sheet": "happy-play-P13",
-    "frames": 9,
+    "frames": 8,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -595,7 +595,7 @@
   },
   "happy-play-P14": {
     "sheet": "happy-play-P14",
-    "frames": 39,
+    "frames": 38,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -604,7 +604,7 @@
   },
   "happy-play-P15": {
     "sheet": "happy-play-P15",
-    "frames": 61,
+    "frames": 56,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -613,7 +613,7 @@
   },
   "happy-play-P16": {
     "sheet": "happy-play-P16",
-    "frames": 143,
+    "frames": 142,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -622,7 +622,7 @@
   },
   "happy-play-P17": {
     "sheet": "happy-play-P17",
-    "frames": 27,
+    "frames": 24,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -676,7 +676,7 @@
   },
   "happy-play-P22": {
     "sheet": "happy-play-P22",
-    "frames": 197,
+    "frames": 196,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -703,7 +703,7 @@
   },
   "happy-play-P25": {
     "sheet": "happy-play-P25",
-    "frames": 13,
+    "frames": 12,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -721,7 +721,7 @@
   },
   "happy-play-P27": {
     "sheet": "happy-play-P27",
-    "frames": 101,
+    "frames": 102,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -730,7 +730,7 @@
   },
   "happy-play-P28": {
     "sheet": "happy-play-P28",
-    "frames": 10,
+    "frames": 9,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -739,7 +739,7 @@
   },
   "happy-play-P29": {
     "sheet": "happy-play-P29",
-    "frames": 8,
+    "frames": 7,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -748,7 +748,7 @@
   },
   "happy-play-P3": {
     "sheet": "happy-play-P3",
-    "frames": 117,
+    "frames": 115,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -766,7 +766,7 @@
   },
   "happy-play-P31": {
     "sheet": "happy-play-P31",
-    "frames": 13,
+    "frames": 12,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -802,7 +802,7 @@
   },
   "happy-play-P35": {
     "sheet": "happy-play-P35",
-    "frames": 158,
+    "frames": 145,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -829,7 +829,7 @@
   },
   "happy-play-P38": {
     "sheet": "happy-play-P38",
-    "frames": 11,
+    "frames": 10,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -838,7 +838,7 @@
   },
   "happy-play-P39": {
     "sheet": "happy-play-P39",
-    "frames": 8,
+    "frames": 19,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -847,7 +847,7 @@
   },
   "happy-play-P4": {
     "sheet": "happy-play-P4",
-    "frames": 166,
+    "frames": 165,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -883,7 +883,7 @@
   },
   "happy-play-P43": {
     "sheet": "happy-play-P43",
-    "frames": 15,
+    "frames": 16,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -892,7 +892,7 @@
   },
   "happy-play-P44": {
     "sheet": "happy-play-P44",
-    "frames": 117,
+    "frames": 116,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -901,7 +901,7 @@
   },
   "happy-play-P45": {
     "sheet": "happy-play-P45",
-    "frames": 78,
+    "frames": 19,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -928,7 +928,7 @@
   },
   "happy-play-P5": {
     "sheet": "happy-play-P5",
-    "frames": 17,
+    "frames": 18,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -937,7 +937,7 @@
   },
   "happy-play-P6": {
     "sheet": "happy-play-P6",
-    "frames": 14,
+    "frames": 13,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -964,7 +964,7 @@
   },
   "happy-play-P9": {
     "sheet": "happy-play-P9",
-    "frames": 15,
+    "frames": 14,
     "speed": 200,
     "frameW": 160,
     "frameH": 160,
@@ -1000,7 +1000,7 @@
   },
   "peaceful-Stand": {
     "sheet": "peaceful-Stand",
-    "frames": 41,
+    "frames": 38,
     "speed": 300,
     "frameW": 160,
     "frameH": 160,
@@ -1009,7 +1009,7 @@
   },
   "peaceful-Stand1": {
     "sheet": "peaceful-Stand1",
-    "frames": 37,
+    "frames": 36,
     "speed": 300,
     "frameW": 160,
     "frameH": 160,
@@ -1036,7 +1036,7 @@
   },
   "peaceful-interact-BE3": {
     "sheet": "peaceful-interact-BE3",
-    "frames": 23,
+    "frames": 21,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1045,7 +1045,7 @@
   },
   "peaceful-interact-BE4": {
     "sheet": "peaceful-interact-BE4",
-    "frames": 16,
+    "frames": 14,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1054,7 +1054,7 @@
   },
   "peaceful-interact-BE5": {
     "sheet": "peaceful-interact-BE5",
-    "frames": 9,
+    "frames": 23,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1072,7 +1072,7 @@
   },
   "peaceful-interact-H1": {
     "sheet": "peaceful-interact-H1",
-    "frames": 20,
+    "frames": 19,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1153,7 +1153,7 @@
   },
   "peaceful-interact-LE2": {
     "sheet": "peaceful-interact-LE2",
-    "frames": 13,
+    "frames": 12,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1180,7 +1180,7 @@
   },
   "peaceful-interact-LF2": {
     "sheet": "peaceful-interact-LF2",
-    "frames": 35,
+    "frames": 34,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1198,7 +1198,7 @@
   },
   "peaceful-interact-LF4": {
     "sheet": "peaceful-interact-LF4",
-    "frames": 17,
+    "frames": 4,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1207,7 +1207,7 @@
   },
   "peaceful-interact-LF5": {
     "sheet": "peaceful-interact-LF5",
-    "frames": 17,
+    "frames": 16,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1216,7 +1216,7 @@
   },
   "peaceful-interact-LH1": {
     "sheet": "peaceful-interact-LH1",
-    "frames": 9,
+    "frames": 10,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1234,7 +1234,7 @@
   },
   "peaceful-interact-LH3": {
     "sheet": "peaceful-interact-LH3",
-    "frames": 31,
+    "frames": 32,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1252,7 +1252,7 @@
   },
   "peaceful-interact-M1": {
     "sheet": "peaceful-interact-M1",
-    "frames": 16,
+    "frames": 18,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1324,7 +1324,7 @@
   },
   "peaceful-interact-RE4": {
     "sheet": "peaceful-interact-RE4",
-    "frames": 6,
+    "frames": 5,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1378,7 +1378,7 @@
   },
   "peaceful-interact-RH3": {
     "sheet": "peaceful-interact-RH3",
-    "frames": 12,
+    "frames": 11,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1423,7 +1423,7 @@
   },
   "peaceful-play-P10": {
     "sheet": "peaceful-play-P10",
-    "frames": 78,
+    "frames": 76,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1432,7 +1432,7 @@
   },
   "peaceful-play-P100": {
     "sheet": "peaceful-play-P100",
-    "frames": 57,
+    "frames": 59,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1459,7 +1459,7 @@
   },
   "peaceful-play-P13": {
     "sheet": "peaceful-play-P13",
-    "frames": 28,
+    "frames": 20,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1495,7 +1495,7 @@
   },
   "peaceful-play-P17": {
     "sheet": "peaceful-play-P17",
-    "frames": 111,
+    "frames": 110,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1522,7 +1522,7 @@
   },
   "peaceful-play-P2": {
     "sheet": "peaceful-play-P2",
-    "frames": 21,
+    "frames": 20,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1558,7 +1558,7 @@
   },
   "peaceful-play-P23": {
     "sheet": "peaceful-play-P23",
-    "frames": 11,
+    "frames": 10,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1567,7 +1567,7 @@
   },
   "peaceful-play-P24": {
     "sheet": "peaceful-play-P24",
-    "frames": 12,
+    "frames": 17,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1594,7 +1594,7 @@
   },
   "peaceful-play-P27": {
     "sheet": "peaceful-play-P27",
-    "frames": 37,
+    "frames": 36,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1639,7 +1639,7 @@
   },
   "peaceful-play-P31": {
     "sheet": "peaceful-play-P31",
-    "frames": 26,
+    "frames": 27,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1648,7 +1648,7 @@
   },
   "peaceful-play-P32": {
     "sheet": "peaceful-play-P32",
-    "frames": 8,
+    "frames": 13,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1666,7 +1666,7 @@
   },
   "peaceful-play-P34": {
     "sheet": "peaceful-play-P34",
-    "frames": 8,
+    "frames": 7,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1684,7 +1684,7 @@
   },
   "peaceful-play-P36": {
     "sheet": "peaceful-play-P36",
-    "frames": 196,
+    "frames": 18,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1693,7 +1693,7 @@
   },
   "peaceful-play-P37": {
     "sheet": "peaceful-play-P37",
-    "frames": 32,
+    "frames": 47,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1729,7 +1729,7 @@
   },
   "peaceful-play-P40": {
     "sheet": "peaceful-play-P40",
-    "frames": 29,
+    "frames": 30,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1738,7 +1738,7 @@
   },
   "peaceful-play-P41": {
     "sheet": "peaceful-play-P41",
-    "frames": 195,
+    "frames": 196,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1747,7 +1747,7 @@
   },
   "peaceful-play-P42": {
     "sheet": "peaceful-play-P42",
-    "frames": 51,
+    "frames": 50,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1774,7 +1774,7 @@
   },
   "peaceful-play-P45": {
     "sheet": "peaceful-play-P45",
-    "frames": 37,
+    "frames": 38,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1783,7 +1783,7 @@
   },
   "peaceful-play-P46": {
     "sheet": "peaceful-play-P46",
-    "frames": 69,
+    "frames": 67,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1792,7 +1792,7 @@
   },
   "peaceful-play-P47": {
     "sheet": "peaceful-play-P47",
-    "frames": 65,
+    "frames": 62,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1819,7 +1819,7 @@
   },
   "peaceful-play-P5": {
     "sheet": "peaceful-play-P5",
-    "frames": 15,
+    "frames": 14,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1828,7 +1828,7 @@
   },
   "peaceful-play-P50": {
     "sheet": "peaceful-play-P50",
-    "frames": 6,
+    "frames": 7,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1846,7 +1846,7 @@
   },
   "peaceful-play-P52": {
     "sheet": "peaceful-play-P52",
-    "frames": 51,
+    "frames": 50,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1900,7 +1900,7 @@
   },
   "peaceful-play-P58": {
     "sheet": "peaceful-play-P58",
-    "frames": 60,
+    "frames": 58,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1909,7 +1909,7 @@
   },
   "peaceful-play-P59": {
     "sheet": "peaceful-play-P59",
-    "frames": 25,
+    "frames": 23,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1918,7 +1918,7 @@
   },
   "peaceful-play-P6": {
     "sheet": "peaceful-play-P6",
-    "frames": 77,
+    "frames": 76,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1972,7 +1972,7 @@
   },
   "peaceful-play-P65": {
     "sheet": "peaceful-play-P65",
-    "frames": 77,
+    "frames": 78,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1990,7 +1990,7 @@
   },
   "peaceful-play-P67": {
     "sheet": "peaceful-play-P67",
-    "frames": 44,
+    "frames": 45,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -1999,7 +1999,7 @@
   },
   "peaceful-play-P68": {
     "sheet": "peaceful-play-P68",
-    "frames": 17,
+    "frames": 18,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -2017,7 +2017,7 @@
   },
   "peaceful-play-P7": {
     "sheet": "peaceful-play-P7",
-    "frames": 18,
+    "frames": 10,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -2035,7 +2035,7 @@
   },
   "peaceful-play-P71": {
     "sheet": "peaceful-play-P71",
-    "frames": 17,
+    "frames": 16,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -2044,7 +2044,7 @@
   },
   "peaceful-play-P72": {
     "sheet": "peaceful-play-P72",
-    "frames": 102,
+    "frames": 100,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -2071,7 +2071,7 @@
   },
   "peaceful-play-P75": {
     "sheet": "peaceful-play-P75",
-    "frames": 41,
+    "frames": 136,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -2080,7 +2080,7 @@
   },
   "peaceful-play-P76": {
     "sheet": "peaceful-play-P76",
-    "frames": 171,
+    "frames": 170,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -2107,7 +2107,7 @@
   },
   "peaceful-play-P79": {
     "sheet": "peaceful-play-P79",
-    "frames": 44,
+    "frames": 12,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -2116,7 +2116,7 @@
   },
   "peaceful-play-P8": {
     "sheet": "peaceful-play-P8",
-    "frames": 15,
+    "frames": 22,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -2125,7 +2125,7 @@
   },
   "peaceful-play-P80": {
     "sheet": "peaceful-play-P80",
-    "frames": 82,
+    "frames": 157,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -2134,7 +2134,7 @@
   },
   "peaceful-play-P81": {
     "sheet": "peaceful-play-P81",
-    "frames": 13,
+    "frames": 14,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -2152,7 +2152,7 @@
   },
   "peaceful-play-P83": {
     "sheet": "peaceful-play-P83",
-    "frames": 161,
+    "frames": 197,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
@@ -2170,11 +2170,1640 @@
   },
   "peaceful-play-P85": {
     "sheet": "peaceful-play-P85",
-    "frames": 29,
+    "frames": 9,
     "speed": 250,
     "frameW": 160,
     "frameH": 160,
     "flipX": false,
     "source": "peaceful/play/P85.swf"
+  },
+  "peaceful-play-P86": {
+    "sheet": "peaceful-play-P86",
+    "frames": 9,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "peaceful/play/P86.swf"
+  },
+  "peaceful-play-P87": {
+    "sheet": "peaceful-play-P87",
+    "frames": 143,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "peaceful/play/P87.swf"
+  },
+  "peaceful-play-P88": {
+    "sheet": "peaceful-play-P88",
+    "frames": 78,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "peaceful/play/P88.swf"
+  },
+  "peaceful-play-P89": {
+    "sheet": "peaceful-play-P89",
+    "frames": 36,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "peaceful/play/P89.swf"
+  },
+  "peaceful-play-P9": {
+    "sheet": "peaceful-play-P9",
+    "frames": 12,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "peaceful/play/P9.swf"
+  },
+  "peaceful-play-P90": {
+    "sheet": "peaceful-play-P90",
+    "frames": 65,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "peaceful/play/P90.swf"
+  },
+  "peaceful-play-P91": {
+    "sheet": "peaceful-play-P91",
+    "frames": 5,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "peaceful/play/P91.swf"
+  },
+  "peaceful-play-P92": {
+    "sheet": "peaceful-play-P92",
+    "frames": 10,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "peaceful/play/P92.swf"
+  },
+  "peaceful-play-P93": {
+    "sheet": "peaceful-play-P93",
+    "frames": 114,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "peaceful/play/P93.swf"
+  },
+  "peaceful-play-P94": {
+    "sheet": "peaceful-play-P94",
+    "frames": 135,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "peaceful/play/P94.swf"
+  },
+  "peaceful-play-P95": {
+    "sheet": "peaceful-play-P95",
+    "frames": 9,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "peaceful/play/P95.swf"
+  },
+  "peaceful-play-P96": {
+    "sheet": "peaceful-play-P96",
+    "frames": 10,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "peaceful/play/P96.swf"
+  },
+  "peaceful-play-P97": {
+    "sheet": "peaceful-play-P97",
+    "frames": 7,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "peaceful/play/P97.swf"
+  },
+  "peaceful-play-P98": {
+    "sheet": "peaceful-play-P98",
+    "frames": 88,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "peaceful/play/P98.swf"
+  },
+  "peaceful-play-P99": {
+    "sheet": "peaceful-play-P99",
+    "frames": 173,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "peaceful/play/P99.swf"
+  },
+  "prostrate-Appear": {
+    "sheet": "prostrate-Appear",
+    "frames": 16,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/Appear.swf"
+  },
+  "prostrate-Hide": {
+    "sheet": "prostrate-Hide",
+    "frames": 16,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/Hide.swf"
+  },
+  "prostrate-Speak": {
+    "sheet": "prostrate-Speak",
+    "frames": 14,
+    "speed": 200,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/Speak.swf"
+  },
+  "prostrate-Stand": {
+    "sheet": "prostrate-Stand",
+    "frames": 50,
+    "speed": 300,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/Stand.swf"
+  },
+  "prostrate-Stand1": {
+    "sheet": "prostrate-Stand1",
+    "frames": 33,
+    "speed": 300,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/Stand1.swf"
+  },
+  "prostrate-interact-BE1": {
+    "sheet": "prostrate-interact-BE1",
+    "frames": 7,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/interact/BE1.swf"
+  },
+  "prostrate-interact-BE2": {
+    "sheet": "prostrate-interact-BE2",
+    "frames": 8,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/interact/BE2.swf"
+  },
+  "prostrate-interact-BE3": {
+    "sheet": "prostrate-interact-BE3",
+    "frames": 14,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/interact/BE3.swf"
+  },
+  "prostrate-interact-BE4": {
+    "sheet": "prostrate-interact-BE4",
+    "frames": 28,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/interact/BE4.swf"
+  },
+  "prostrate-interact-BE5": {
+    "sheet": "prostrate-interact-BE5",
+    "frames": 33,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/interact/BE5.swf"
+  },
+  "prostrate-interact-BE6": {
+    "sheet": "prostrate-interact-BE6",
+    "frames": 11,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/interact/BE6.swf"
+  },
+  "prostrate-interact-F1": {
+    "sheet": "prostrate-interact-F1",
+    "frames": 14,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/interact/F1.swf"
+  },
+  "prostrate-interact-F2": {
+    "sheet": "prostrate-interact-F2",
+    "frames": 38,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/interact/F2.swf"
+  },
+  "prostrate-interact-F3": {
+    "sheet": "prostrate-interact-F3",
+    "frames": 13,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/interact/F3.swf"
+  },
+  "prostrate-interact-FA1": {
+    "sheet": "prostrate-interact-FA1",
+    "frames": 12,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/interact/FA1.swf"
+  },
+  "prostrate-interact-H1": {
+    "sheet": "prostrate-interact-H1",
+    "frames": 33,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/interact/H1.swf"
+  },
+  "prostrate-interact-H2": {
+    "sheet": "prostrate-interact-H2",
+    "frames": 7,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/interact/H2.swf"
+  },
+  "prostrate-interact-H3": {
+    "sheet": "prostrate-interact-H3",
+    "frames": 8,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/interact/H3.swf"
+  },
+  "prostrate-interact-M1": {
+    "sheet": "prostrate-interact-M1",
+    "frames": 33,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/interact/M1.swf"
+  },
+  "prostrate-interact-M2": {
+    "sheet": "prostrate-interact-M2",
+    "frames": 4,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/interact/M2.swf"
+  },
+  "prostrate-interact-M3": {
+    "sheet": "prostrate-interact-M3",
+    "frames": 5,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/interact/M3.swf"
+  },
+  "prostrate-interact-M4": {
+    "sheet": "prostrate-interact-M4",
+    "frames": 113,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/interact/M4.swf"
+  },
+  "prostrate-interact-M5": {
+    "sheet": "prostrate-interact-M5",
+    "frames": 17,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/interact/M5.swf"
+  },
+  "prostrate-interact-RH1": {
+    "sheet": "prostrate-interact-RH1",
+    "frames": 14,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/interact/RH1.swf"
+  },
+  "prostrate-interact-RH2": {
+    "sheet": "prostrate-interact-RH2",
+    "frames": 13,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/interact/RH2.swf"
+  },
+  "prostrate-interact-RH3": {
+    "sheet": "prostrate-interact-RH3",
+    "frames": 11,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/interact/RH3.swf"
+  },
+  "prostrate-interact-RH4": {
+    "sheet": "prostrate-interact-RH4",
+    "frames": 5,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/interact/RH4.swf"
+  },
+  "prostrate-play-P1": {
+    "sheet": "prostrate-play-P1",
+    "frames": 155,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P1.swf"
+  },
+  "prostrate-play-P10": {
+    "sheet": "prostrate-play-P10",
+    "frames": 18,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P10.swf"
+  },
+  "prostrate-play-P11": {
+    "sheet": "prostrate-play-P11",
+    "frames": 98,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P11.swf"
+  },
+  "prostrate-play-P12": {
+    "sheet": "prostrate-play-P12",
+    "frames": 11,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P12.swf"
+  },
+  "prostrate-play-P13": {
+    "sheet": "prostrate-play-P13",
+    "frames": 8,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P13.swf"
+  },
+  "prostrate-play-P14": {
+    "sheet": "prostrate-play-P14",
+    "frames": 51,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P14.swf"
+  },
+  "prostrate-play-P15": {
+    "sheet": "prostrate-play-P15",
+    "frames": 13,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P15.swf"
+  },
+  "prostrate-play-P16": {
+    "sheet": "prostrate-play-P16",
+    "frames": 6,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P16.swf"
+  },
+  "prostrate-play-P17": {
+    "sheet": "prostrate-play-P17",
+    "frames": 25,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P17.swf"
+  },
+  "prostrate-play-P18": {
+    "sheet": "prostrate-play-P18",
+    "frames": 13,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P18.swf"
+  },
+  "prostrate-play-P19": {
+    "sheet": "prostrate-play-P19",
+    "frames": 11,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P19.swf"
+  },
+  "prostrate-play-P2": {
+    "sheet": "prostrate-play-P2",
+    "frames": 4,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P2.swf"
+  },
+  "prostrate-play-P20": {
+    "sheet": "prostrate-play-P20",
+    "frames": 46,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P20.swf"
+  },
+  "prostrate-play-P21": {
+    "sheet": "prostrate-play-P21",
+    "frames": 50,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P21.swf"
+  },
+  "prostrate-play-P22": {
+    "sheet": "prostrate-play-P22",
+    "frames": 6,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P22.swf"
+  },
+  "prostrate-play-P23": {
+    "sheet": "prostrate-play-P23",
+    "frames": 16,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P23.swf"
+  },
+  "prostrate-play-P24": {
+    "sheet": "prostrate-play-P24",
+    "frames": 25,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P24.swf"
+  },
+  "prostrate-play-P25": {
+    "sheet": "prostrate-play-P25",
+    "frames": 11,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P25.swf"
+  },
+  "prostrate-play-P26": {
+    "sheet": "prostrate-play-P26",
+    "frames": 13,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P26.swf"
+  },
+  "prostrate-play-P27": {
+    "sheet": "prostrate-play-P27",
+    "frames": 16,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P27.swf"
+  },
+  "prostrate-play-P28": {
+    "sheet": "prostrate-play-P28",
+    "frames": 4,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P28.swf"
+  },
+  "prostrate-play-P29": {
+    "sheet": "prostrate-play-P29",
+    "frames": 179,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P29.swf"
+  },
+  "prostrate-play-P3": {
+    "sheet": "prostrate-play-P3",
+    "frames": 8,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P3.swf"
+  },
+  "prostrate-play-P30": {
+    "sheet": "prostrate-play-P30",
+    "frames": 72,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P30.swf"
+  },
+  "prostrate-play-P31": {
+    "sheet": "prostrate-play-P31",
+    "frames": 13,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P31.swf"
+  },
+  "prostrate-play-P32": {
+    "sheet": "prostrate-play-P32",
+    "frames": 30,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P32.swf"
+  },
+  "prostrate-play-P33": {
+    "sheet": "prostrate-play-P33",
+    "frames": 185,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P33.swf"
+  },
+  "prostrate-play-P34": {
+    "sheet": "prostrate-play-P34",
+    "frames": 6,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P34.swf"
+  },
+  "prostrate-play-P35": {
+    "sheet": "prostrate-play-P35",
+    "frames": 6,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P35.swf"
+  },
+  "prostrate-play-P36": {
+    "sheet": "prostrate-play-P36",
+    "frames": 20,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P36.swf"
+  },
+  "prostrate-play-P37": {
+    "sheet": "prostrate-play-P37",
+    "frames": 7,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P37.swf"
+  },
+  "prostrate-play-P38": {
+    "sheet": "prostrate-play-P38",
+    "frames": 198,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P38.swf"
+  },
+  "prostrate-play-P39": {
+    "sheet": "prostrate-play-P39",
+    "frames": 57,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P39.swf"
+  },
+  "prostrate-play-P4": {
+    "sheet": "prostrate-play-P4",
+    "frames": 4,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P4.swf"
+  },
+  "prostrate-play-P40": {
+    "sheet": "prostrate-play-P40",
+    "frames": 23,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P40.swf"
+  },
+  "prostrate-play-P41": {
+    "sheet": "prostrate-play-P41",
+    "frames": 43,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P41.swf"
+  },
+  "prostrate-play-P42": {
+    "sheet": "prostrate-play-P42",
+    "frames": 119,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P42.swf"
+  },
+  "prostrate-play-P43": {
+    "sheet": "prostrate-play-P43",
+    "frames": 72,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P43.swf"
+  },
+  "prostrate-play-P44": {
+    "sheet": "prostrate-play-P44",
+    "frames": 13,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P44.swf"
+  },
+  "prostrate-play-P45": {
+    "sheet": "prostrate-play-P45",
+    "frames": 9,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P45.swf"
+  },
+  "prostrate-play-P46": {
+    "sheet": "prostrate-play-P46",
+    "frames": 139,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P46.swf"
+  },
+  "prostrate-play-P5": {
+    "sheet": "prostrate-play-P5",
+    "frames": 19,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P5.swf"
+  },
+  "prostrate-play-P6": {
+    "sheet": "prostrate-play-P6",
+    "frames": 81,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P6.swf"
+  },
+  "prostrate-play-P7": {
+    "sheet": "prostrate-play-P7",
+    "frames": 181,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P7.swf"
+  },
+  "prostrate-play-P8": {
+    "sheet": "prostrate-play-P8",
+    "frames": 23,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P8.swf"
+  },
+  "prostrate-play-P9": {
+    "sheet": "prostrate-play-P9",
+    "frames": 28,
+    "speed": 400,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "prostrate/play/P9.swf"
+  },
+  "sad-Appear": {
+    "sheet": "sad-Appear",
+    "frames": 15,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/Appear.swf"
+  },
+  "sad-Hide": {
+    "sheet": "sad-Hide",
+    "frames": 13,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/Hide.swf"
+  },
+  "sad-Speak": {
+    "sheet": "sad-Speak",
+    "frames": 11,
+    "speed": 200,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/Speak.swf"
+  },
+  "sad-Stand": {
+    "sheet": "sad-Stand",
+    "frames": 45,
+    "speed": 300,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/Stand.swf"
+  },
+  "sad-Stand1": {
+    "sheet": "sad-Stand1",
+    "frames": 52,
+    "speed": 300,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/Stand1.swf"
+  },
+  "sad-interact-E1": {
+    "sheet": "sad-interact-E1",
+    "frames": 9,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/interact/E1.swf"
+  },
+  "sad-interact-E2": {
+    "sheet": "sad-interact-E2",
+    "frames": 18,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/interact/E2.swf"
+  },
+  "sad-interact-H1": {
+    "sheet": "sad-interact-H1",
+    "frames": 8,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/interact/H1.swf"
+  },
+  "sad-interact-H2": {
+    "sheet": "sad-interact-H2",
+    "frames": 6,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/interact/H2.swf"
+  },
+  "sad-interact-H3": {
+    "sheet": "sad-interact-H3",
+    "frames": 15,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/interact/H3.swf"
+  },
+  "sad-interact-H4": {
+    "sheet": "sad-interact-H4",
+    "frames": 4,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/interact/H4.swf"
+  },
+  "sad-interact-LF1": {
+    "sheet": "sad-interact-LF1",
+    "frames": 17,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/interact/LF1.swf"
+  },
+  "sad-interact-LF2": {
+    "sheet": "sad-interact-LF2",
+    "frames": 4,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/interact/LF2.swf"
+  },
+  "sad-interact-LH1": {
+    "sheet": "sad-interact-LH1",
+    "frames": 5,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/interact/LH1.swf"
+  },
+  "sad-interact-M1": {
+    "sheet": "sad-interact-M1",
+    "frames": 85,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/interact/M1.swf"
+  },
+  "sad-interact-M2": {
+    "sheet": "sad-interact-M2",
+    "frames": 9,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/interact/M2.swf"
+  },
+  "sad-interact-M3": {
+    "sheet": "sad-interact-M3",
+    "frames": 5,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/interact/M3.swf"
+  },
+  "sad-interact-M4": {
+    "sheet": "sad-interact-M4",
+    "frames": 4,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/interact/M4.swf"
+  },
+  "sad-interact-M5": {
+    "sheet": "sad-interact-M5",
+    "frames": 4,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/interact/M5.swf"
+  },
+  "sad-interact-M6": {
+    "sheet": "sad-interact-M6",
+    "frames": 6,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/interact/M6.swf"
+  },
+  "sad-interact-M7": {
+    "sheet": "sad-interact-M7",
+    "frames": 18,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/interact/M7.swf"
+  },
+  "sad-interact-M8": {
+    "sheet": "sad-interact-M8",
+    "frames": 6,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/interact/M8.swf"
+  },
+  "sad-interact-M9": {
+    "sheet": "sad-interact-M9",
+    "frames": 9,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/interact/M9.swf"
+  },
+  "sad-interact-RF1": {
+    "sheet": "sad-interact-RF1",
+    "frames": 9,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/interact/RF1.swf"
+  },
+  "sad-interact-RF2": {
+    "sheet": "sad-interact-RF2",
+    "frames": 11,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/interact/RF2.swf"
+  },
+  "sad-interact-RF3": {
+    "sheet": "sad-interact-RF3",
+    "frames": 4,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/interact/RF3.swf"
+  },
+  "sad-interact-RF4": {
+    "sheet": "sad-interact-RF4",
+    "frames": 5,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/interact/RF4.swf"
+  },
+  "sad-play-P1": {
+    "sheet": "sad-play-P1",
+    "frames": 45,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/play/P1.swf"
+  },
+  "sad-play-P10": {
+    "sheet": "sad-play-P10",
+    "frames": 54,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/play/P10.swf"
+  },
+  "sad-play-P11": {
+    "sheet": "sad-play-P11",
+    "frames": 19,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/play/P11.swf"
+  },
+  "sad-play-P12": {
+    "sheet": "sad-play-P12",
+    "frames": 15,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/play/P12.swf"
+  },
+  "sad-play-P13": {
+    "sheet": "sad-play-P13",
+    "frames": 17,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/play/P13.swf"
+  },
+  "sad-play-P14": {
+    "sheet": "sad-play-P14",
+    "frames": 97,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/play/P14.swf"
+  },
+  "sad-play-P15": {
+    "sheet": "sad-play-P15",
+    "frames": 50,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/play/P15.swf"
+  },
+  "sad-play-P16": {
+    "sheet": "sad-play-P16",
+    "frames": 4,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/play/P16.swf"
+  },
+  "sad-play-P17": {
+    "sheet": "sad-play-P17",
+    "frames": 32,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/play/P17.swf"
+  },
+  "sad-play-P18": {
+    "sheet": "sad-play-P18",
+    "frames": 45,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/play/P18.swf"
+  },
+  "sad-play-P19": {
+    "sheet": "sad-play-P19",
+    "frames": 11,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/play/P19.swf"
+  },
+  "sad-play-P2": {
+    "sheet": "sad-play-P2",
+    "frames": 18,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/play/P2.swf"
+  },
+  "sad-play-P20": {
+    "sheet": "sad-play-P20",
+    "frames": 59,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/play/P20.swf"
+  },
+  "sad-play-P21": {
+    "sheet": "sad-play-P21",
+    "frames": 11,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/play/P21.swf"
+  },
+  "sad-play-P22": {
+    "sheet": "sad-play-P22",
+    "frames": 22,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/play/P22.swf"
+  },
+  "sad-play-P3": {
+    "sheet": "sad-play-P3",
+    "frames": 5,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/play/P3.swf"
+  },
+  "sad-play-P4": {
+    "sheet": "sad-play-P4",
+    "frames": 16,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/play/P4.swf"
+  },
+  "sad-play-P5": {
+    "sheet": "sad-play-P5",
+    "frames": 18,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/play/P5.swf"
+  },
+  "sad-play-P6": {
+    "sheet": "sad-play-P6",
+    "frames": 6,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/play/P6.swf"
+  },
+  "sad-play-P7": {
+    "sheet": "sad-play-P7",
+    "frames": 6,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/play/P7.swf"
+  },
+  "sad-play-P8": {
+    "sheet": "sad-play-P8",
+    "frames": 27,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/play/P8.swf"
+  },
+  "sad-play-P9": {
+    "sheet": "sad-play-P9",
+    "frames": 26,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "sad/play/P9.swf"
+  },
+  "upset-Appear": {
+    "sheet": "upset-Appear",
+    "frames": 16,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/Appear.swf"
+  },
+  "upset-Hide": {
+    "sheet": "upset-Hide",
+    "frames": 25,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/Hide.swf"
+  },
+  "upset-Speak": {
+    "sheet": "upset-Speak",
+    "frames": 6,
+    "speed": 200,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/Speak.swf"
+  },
+  "upset-Stand": {
+    "sheet": "upset-Stand",
+    "frames": 3,
+    "speed": 300,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/Stand.swf"
+  },
+  "upset-Stand1": {
+    "sheet": "upset-Stand1",
+    "frames": 3,
+    "speed": 300,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/Stand1.swf"
+  },
+  "upset-StandC": {
+    "sheet": "upset-StandC",
+    "frames": 3,
+    "speed": 300,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/StandC.swf"
+  },
+  "upset-interact-BE1": {
+    "sheet": "upset-interact-BE1",
+    "frames": 9,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/interact/BE1.swf"
+  },
+  "upset-interact-BE2": {
+    "sheet": "upset-interact-BE2",
+    "frames": 12,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/interact/BE2.swf"
+  },
+  "upset-interact-H1": {
+    "sheet": "upset-interact-H1",
+    "frames": 8,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/interact/H1.swf"
+  },
+  "upset-interact-H2": {
+    "sheet": "upset-interact-H2",
+    "frames": 5,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/interact/H2.swf"
+  },
+  "upset-interact-H3": {
+    "sheet": "upset-interact-H3",
+    "frames": 6,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/interact/H3.swf"
+  },
+  "upset-interact-LF1": {
+    "sheet": "upset-interact-LF1",
+    "frames": 27,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/interact/LF1.swf"
+  },
+  "upset-interact-LF2": {
+    "sheet": "upset-interact-LF2",
+    "frames": 6,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/interact/LF2.swf"
+  },
+  "upset-interact-LF3": {
+    "sheet": "upset-interact-LF3",
+    "frames": 4,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/interact/LF3.swf"
+  },
+  "upset-interact-M1": {
+    "sheet": "upset-interact-M1",
+    "frames": 6,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/interact/M1.swf"
+  },
+  "upset-interact-M2": {
+    "sheet": "upset-interact-M2",
+    "frames": 10,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/interact/M2.swf"
+  },
+  "upset-interact-M3": {
+    "sheet": "upset-interact-M3",
+    "frames": 5,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/interact/M3.swf"
+  },
+  "upset-interact-M4": {
+    "sheet": "upset-interact-M4",
+    "frames": 5,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/interact/M4.swf"
+  },
+  "upset-interact-M5": {
+    "sheet": "upset-interact-M5",
+    "frames": 5,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/interact/M5.swf"
+  },
+  "upset-interact-M6": {
+    "sheet": "upset-interact-M6",
+    "frames": 7,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/interact/M6.swf"
+  },
+  "upset-interact-RH1": {
+    "sheet": "upset-interact-RH1",
+    "frames": 14,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/interact/RH1.swf"
+  },
+  "upset-play-P1": {
+    "sheet": "upset-play-P1",
+    "frames": 5,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P1.swf"
+  },
+  "upset-play-P10": {
+    "sheet": "upset-play-P10",
+    "frames": 22,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P10.swf"
+  },
+  "upset-play-P11": {
+    "sheet": "upset-play-P11",
+    "frames": 20,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P11.swf"
+  },
+  "upset-play-P12": {
+    "sheet": "upset-play-P12",
+    "frames": 120,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P12.swf"
+  },
+  "upset-play-P13": {
+    "sheet": "upset-play-P13",
+    "frames": 86,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P13.swf"
+  },
+  "upset-play-P14": {
+    "sheet": "upset-play-P14",
+    "frames": 20,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P14.swf"
+  },
+  "upset-play-P15": {
+    "sheet": "upset-play-P15",
+    "frames": 11,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P15.swf"
+  },
+  "upset-play-P16": {
+    "sheet": "upset-play-P16",
+    "frames": 38,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P16.swf"
+  },
+  "upset-play-P17": {
+    "sheet": "upset-play-P17",
+    "frames": 9,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P17.swf"
+  },
+  "upset-play-P18": {
+    "sheet": "upset-play-P18",
+    "frames": 160,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P18.swf"
+  },
+  "upset-play-P19": {
+    "sheet": "upset-play-P19",
+    "frames": 73,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P19.swf"
+  },
+  "upset-play-P2": {
+    "sheet": "upset-play-P2",
+    "frames": 30,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P2.swf"
+  },
+  "upset-play-P20": {
+    "sheet": "upset-play-P20",
+    "frames": 29,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P20.swf"
+  },
+  "upset-play-P21": {
+    "sheet": "upset-play-P21",
+    "frames": 123,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P21.swf"
+  },
+  "upset-play-P22": {
+    "sheet": "upset-play-P22",
+    "frames": 135,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P22.swf"
+  },
+  "upset-play-P23": {
+    "sheet": "upset-play-P23",
+    "frames": 4,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P23.swf"
+  },
+  "upset-play-P3": {
+    "sheet": "upset-play-P3",
+    "frames": 5,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P3.swf"
+  },
+  "upset-play-P4": {
+    "sheet": "upset-play-P4",
+    "frames": 145,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P4.swf"
+  },
+  "upset-play-P5": {
+    "sheet": "upset-play-P5",
+    "frames": 10,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P5.swf"
+  },
+  "upset-play-P6": {
+    "sheet": "upset-play-P6",
+    "frames": 104,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P6.swf"
+  },
+  "upset-play-P7": {
+    "sheet": "upset-play-P7",
+    "frames": 24,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P7.swf"
+  },
+  "upset-play-P8": {
+    "sheet": "upset-play-P8",
+    "frames": 185,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P8.swf"
+  },
+  "upset-play-P9": {
+    "sheet": "upset-play-P9",
+    "frames": 8,
+    "speed": 250,
+    "frameW": 160,
+    "frameH": 160,
+    "flipX": false,
+    "source": "upset/play/P9.swf"
   }
 }

@@ -381,6 +381,41 @@
       font-family: inherit;
       color: var(--text-secondary);
     }
+
+    /* ─── 富文本：URL 链接 ─── */
+    .rich-link {
+      color: #60a5fa;
+      text-decoration: underline;
+      text-underline-offset: 2px;
+      word-break: break-all;
+      cursor: pointer;
+      transition: color 0.15s;
+    }
+    .rich-link:hover { color: #93c5fd; }
+
+    /* ─── 富文本：本地文件路径 ─── */
+    .rich-path {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(99,102,241,0.12);
+      border: 1px solid rgba(99,102,241,0.25);
+      border-radius: 6px;
+      padding: 2px 8px 2px 6px;
+      font-size: 12px;
+      font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+      color: #a5b4fc;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+      word-break: break-all;
+    }
+    .rich-path:hover {
+      background: rgba(99,102,241,0.22);
+      border-color: rgba(99,102,241,0.5);
+      color: #c7d2fe;
+    }
+    .rich-path-icon { font-style: normal; flex-shrink: 0; }
+    .rich-path-text { word-break: break-all; }
   </style>
 </head>
 <body>
@@ -457,6 +492,67 @@
     }
 
     // ─── 追加消息 ───
+    // ─── 富文本渲染（仅用于 AI 消息） ───
+    // 识别：URL、绝对文件路径（/...  ~/...）、相对路径（./...）
+    function renderRichText(text) {
+      const fragment = document.createDocumentFragment();
+
+      // 正则：先匹配 URL，再匹配文件路径，其余为普通文本
+      // URL：只允许 ASCII 可打印字符（排除空白、中文、常见结束标点）
+      // 路径：/... 或 ~/... 或 ./...，只含 ASCII 路径字符
+      const pattern = /(<https?:\/\/[^\s\u4e00-\u9fff\uff00-\uffef>]+>|https?:\/\/[^\s\u4e00-\u9fff\uff00-\uffef<>"')\].,，。！？；：""'']+(?:[.,](?=[^\s\u4e00-\u9fff\uff00-\uffef)])|(?=[^\s\u4e00-\u9fff\uff00-\uffef)]))*|(?:~\/|\/)[A-Za-z0-9_\-\.\/]+)/g;
+
+      let last = 0;
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        // 普通文本段
+        if (match.index > last) {
+          fragment.appendChild(document.createTextNode(text.slice(last, match.index)));
+        }
+
+        const raw = match[0];
+        // 去掉 Markdown 尖括号包裹 <url>
+        const clean = raw.replace(/^<|>$/g, '');
+
+        if (/^https?:\/\//i.test(clean)) {
+          // ── URL → 蓝色可点链接 ──
+          const a = document.createElement('a');
+          a.href = '#';
+          a.textContent = clean;
+          a.className = 'rich-link';
+          a.title = '点击在浏览器中打开';
+          a.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.quickChatAPI?.openUrl(clean);
+          });
+          fragment.appendChild(a);
+        } else {
+          // ── 文件路径 → 文件卡片 ──
+          const pill = document.createElement('span');
+          pill.className = 'rich-path';
+          pill.title = '点击用系统打开';
+          pill.innerHTML = `<span class="rich-path-icon">📁</span><span class="rich-path-text">${escapeForDisplay(clean)}</span>`;
+          pill.addEventListener('click', () => {
+            window.quickChatAPI?.openLocalPath(clean);
+          });
+          fragment.appendChild(pill);
+        }
+
+        last = match.index + raw.length;
+      }
+
+      // 剩余文本
+      if (last < text.length) {
+        fragment.appendChild(document.createTextNode(text.slice(last)));
+      }
+
+      return fragment;
+    }
+
+    function escapeForDisplay(str) {
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
     function appendMessage(role, text, attachments = []) {
       const msg = document.createElement('div');
       msg.className = `msg ${role}`;
@@ -467,7 +563,13 @@
 
       const bubble = document.createElement('div');
       bubble.className = 'msg-bubble';
-      bubble.textContent = text;
+
+      if (role === 'ai') {
+        // AI 消息：富文本渲染（链接 + 路径可点击）
+        bubble.appendChild(renderRichText(text));
+      } else {
+        bubble.textContent = text;
+      }
 
       if (attachments.length > 0) {
         const attWrap = document.createElement('div');
