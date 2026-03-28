@@ -581,6 +581,15 @@ const SpriteRenderer = (() => {
 
   /** 内部动画切换实现 */
   function _doSetAnimation(name) {
+    // ── 每次切换动画时，重置 pet-container 到标准锚点位置 ──
+    // 防止某些动画/CSS效果残留导致位置飘移
+    const _pc = document.getElementById('pet-container');
+    const _isCompact = typeof TaskbarUI !== 'undefined' && TaskbarUI.isCompact;
+    if (_pc && !DragSystem?.isDragging) {
+      _pc.style.left = _isCompact ? '0px' : '80px';
+      _pc.style.top  = _isCompact ? '0px' : '200px';
+    }
+
     // 直接是 QC 动画名
     if (swfManifest?.[name]) {
       currentAnim = name;
