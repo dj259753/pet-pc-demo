@@ -81,21 +81,32 @@ function readLocalClawConfig() {
       const cfg = JSON.parse(fs.readFileSync(cp, 'utf-8'));
       const token = String(cfg?.token || cfg?.gateway?.auth?.token || '').trim();
       const port  = String(cfg?.gateway?.port || cfg?.gateway?.apiPort || '').trim();
-      const model = String(cfg?.agents?.defaults?.model?.primary || '').trim();
+      // Bug fix: model 可能是字符串（如 "openai/gpt-4o"）也可能是对象（含 .primary）
+      const modelRaw = cfg?.agents?.defaults?.model;
+      const model = String(
+        typeof modelRaw === 'string' ? modelRaw :
+        (modelRaw?.primary || modelRaw?.name || '')
+      ).trim();
       if (token || port) return { token, port, model, source: cp };
     } catch {}
   }
   return { token: '', port: '', model: '', source: '' };
 }
 
-// 判断端口归属：优先按安装目录判断，兜底才按端口号猜
-function guessClawType(port, installed) {
-  // 如果只安装了其中一个，直接定论
+// 判断端口归属：优先按配置文件来源路径判断，最准确
+function guessClawType(port, installed, configSource) {
+  // 优先：配置文件来源路径明确归属
+  if (configSource) {
+    if (configSource.includes('/.openclaw/')) return 'openclaw';
+    if (configSource.includes('/.qqclaw/'))  return 'qqclaw';
+  }
+  // 其次：只安装了其中一个
   if (installed.openclaw && !installed.qqclaw) return 'openclaw';
   if (installed.qqclaw  && !installed.openclaw) return 'qqclaw';
-  // 两者都装或都没装：18789/19789 是 QQClaw 默认端口，其余按 openclaw
+  // 兜底：18789 是 OpenClaw 默认端口，19789 是 QQClaw 默认端口
   const n = Number(port);
-  if ([18789, 19789].includes(n)) return 'qqclaw';
+  if (n === 19789) return 'qqclaw';
+  if (n === 18789) return 'openclaw';
   return 'openclaw';
 }
 
@@ -136,7 +147,7 @@ ipcMain.handle('scan-ports', async () => {
     const ok = await probePort(port, localCfg.token);
     if (ok) {
       foundPort = port;
-      foundType = guessClawType(port, installed);
+      foundType = guessClawType(port, installed, localCfg.source);
       break;
     }
   }
@@ -146,7 +157,7 @@ ipcMain.handle('scan-ports', async () => {
     port:      foundPort,
     type:      foundType,          // 'qqclaw' | 'openclaw' | null
     token:     localCfg.token,
-    model:     localCfg.model || 'openclaw:main',
+    model:     localCfg.model || (foundType === 'qqclaw' ? 'qqclaw:main' : 'openclaw:main'),
     apiUrl:    foundPort ? `http://127.0.0.1:${foundPort}/v1/chat/completions` : '',
     installed: installed,          // { qqclaw: bool, openclaw: bool }
     lsofPorts,
