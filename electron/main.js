@@ -2549,6 +2549,10 @@ ipcMain.handle('save-asr-config', (event, data) => {
     try { fs.chmodSync(configPath, 0o600); } catch {}
 
     console.log('🎤 ASR 配置已保存:', configPath);
+    // 通知渲染进程刷新 ASR 可用性状态
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('asr-config-updated');
+    }
     return { ok: true, configPath };
   } catch (e) {
     console.error('🎤 保存 ASR 配置失败:', e.message);
@@ -2975,14 +2979,30 @@ function sanitizeSkillText(text, fallback = '') {
 
 /**
  * 解析所有可能的已安装 skills 目录
- * 优先级：~/.qqclaw/workspace/skills/ > ~/.openclaw/workspace/skills/（旧版兼容）
+ * 优先级：ai-config 中记录的路径 > ~/.qqclaw/ > ~/.openclaw/（旧版兼容）
  */
 function resolveAllSkillsDirs() {
-  const candidates = [
-    path.join(os.homedir(), '.qqclaw', 'workspace', 'skills'),   // QQClaw 主路径
-    path.join(os.homedir(), '.openclaw', 'workspace', 'skills'),  // 旧版 openclaw 兼容
-  ];
-  return candidates.filter(d => fs.existsSync(d));
+  const candidates = [];
+  // 优先从 ai-config.json 读取用户实际配置的 claw_home
+  try {
+    const aiCfgPath = path.join(os.homedir(), '.qq-pet', 'config', 'ai-config.json');
+    if (fs.existsSync(aiCfgPath)) {
+      const aiCfg = JSON.parse(fs.readFileSync(aiCfgPath, 'utf-8'));
+      if (aiCfg.skills_dir) candidates.push(path.dirname(aiCfg.skills_dir)); // skills_dir 包含 qq-pet，取上层
+      if (aiCfg.claw_home) candidates.push(path.join(String(aiCfg.claw_home).replace(/^~/, os.homedir()), 'workspace', 'skills'));
+    }
+  } catch {}
+  // 默认候选路径
+  candidates.push(path.join(os.homedir(), '.qqclaw', 'workspace', 'skills'));
+  candidates.push(path.join(os.homedir(), '.openclaw', 'workspace', 'skills'));
+  // 去重 + 存在性检查
+  const seen = new Set();
+  return candidates.filter(d => {
+    const resolved = path.resolve(d);
+    if (seen.has(resolved)) return false;
+    seen.add(resolved);
+    return fs.existsSync(d);
+  });
 }
 
 /**
@@ -3283,12 +3303,22 @@ ipcMain.handle('skills-install', async (event, { skillId, source }) => {
   console.log(`🧩 安装 Skill: ${skillId} (来源: ${source})`);
 
   try {
-    const qqclawSkillsDir = path.join(os.homedir(), '.qqclaw', 'workspace', 'skills');
-    fs.mkdirSync(qqclawSkillsDir, { recursive: true });
+    // 优先从 ai-config 读取已配置的 skills 目录
+    let skillsBaseDir = path.join(os.homedir(), '.qqclaw', 'workspace', 'skills');
+    try {
+      const aiCfgPath = path.join(os.homedir(), '.qq-pet', 'config', 'ai-config.json');
+      if (fs.existsSync(aiCfgPath)) {
+        const aiCfg = JSON.parse(fs.readFileSync(aiCfgPath, 'utf-8'));
+        if (aiCfg.claw_home) {
+          skillsBaseDir = path.join(String(aiCfg.claw_home).replace(/^~/, os.homedir()), 'workspace', 'skills');
+        }
+      }
+    } catch {}
+    fs.mkdirSync(skillsBaseDir, { recursive: true });
 
     if (source === 'skillhub-store') {
       // 公开商店 skill：调用内置 skillhub Python CLI 安装
-      return await installViaSkillhubCli(skillId, qqclawSkillsDir);
+      return await installViaSkillhubCli(skillId, skillsBaseDir);
     } else if (source === 'marketplace-available') {
       // 旧版本地 marketplace（离线包）
       const marketplaceBases = [
@@ -3299,7 +3329,7 @@ ipcMain.handle('skills-install', async (event, { skillId, source }) => {
       if (!srcBase) {
         return { ok: false, error: `找不到 skill 源目录: ${skillId}` };
       }
-      const dstDir = path.join(qqclawSkillsDir, skillId);
+      const dstDir = path.join(skillsBaseDir, skillId);
       copyDirSync(path.join(srcBase, skillId), dstDir);
       const meta = { name: skillId, installedAt: Date.now(), source: 'marketplace' };
       fs.writeFileSync(path.join(dstDir, '_skillhub_meta.json'), JSON.stringify(meta, null, 2));
@@ -3317,7 +3347,7 @@ ipcMain.handle('skills-install', async (event, { skillId, source }) => {
       }
       // 私有 skillhub skill: 用 npx skills add，安装到 ~/.qqclaw/workspace/skills/
       return await new Promise((resolve) => {
-        const cmd = `npx skills add ${skillId} --dir "${qqclawSkillsDir}" -y`;
+        const cmd = `npx skills add ${skillId} --dir "${skillsBaseDir}" -y`;
         const env = {
           ...process.env,
           GIT_PRIVATE_TOKEN: auth.token,

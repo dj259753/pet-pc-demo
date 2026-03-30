@@ -221,11 +221,14 @@ const PanelManager = (() => {
     }
 
     // ─── 全局点击：点击面板/菜单外部自动关闭 ───
+    // 注意：system-settings-panel 和 feedback-panel 是表单型面板，不应被点击外部关闭
+    const AUTO_CLOSE_PANEL_IDS = ['backpack-panel', 'chat-panel', 'process-panel', 'diary-panel'];
     const ALL_PANEL_IDS = ['backpack-panel', 'chat-panel', 'process-panel', 'diary-panel', 'system-settings-panel', 'feedback-panel'];
     const ALL_PANEL_SELECTORS = ALL_PANEL_IDS.map(id => `#${id}`).join(',');
 
     function closeAllPanelsAndMenus() {
-      ALL_PANEL_IDS.forEach(id => {
+      // 只关闭非表单型面板（设置/反馈面板保持打开）
+      AUTO_CLOSE_PANEL_IDS.forEach(id => {
         const el = document.getElementById(id);
         if (el && !el.classList.contains('hidden')) {
           el.classList.add('hidden');
@@ -246,10 +249,11 @@ const PanelManager = (() => {
         voiceModeMenu.classList.add('hidden');
       }
       // 关闭所有 retro-panel：点击不在面板内、不在触发按钮内
+      // 设置面板和反馈面板除外（需要手动关闭）
       const insideAnyPanel = e.target.closest(ALL_PANEL_SELECTORS);
       const insideTrigger = e.target.closest('#start-menu, .menu-item, .action-bar-btn, #btn-settings');
       if (!insideAnyPanel && !insideTrigger) {
-        ALL_PANEL_IDS.forEach(id => {
+        AUTO_CLOSE_PANEL_IDS.forEach(id => {
           const el = document.getElementById(id);
           if (el && !el.classList.contains('hidden')) {
             el.classList.add('hidden');

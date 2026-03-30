@@ -18,9 +18,20 @@ const AIBrain = (() => {
   let soulLoadedAt = 0;
   const SOUL_CACHE_TTL = 60 * 60 * 1000; // 1小时刷新一次
 
-  const SOUL_PATH     = `${window.__homeDir || '~'}/.openclaw/agents/qq-pet/SOUL.md`;
-  const IDENTITY_PATH = `${window.__homeDir || '~'}/.openclaw/agents/qq-pet/IDENTITY.md`;
-  const MEMORY_FILE_PATH = `${window.__homeDir || '~'}/.openclaw/agents/qq-pet/memory/MEMORY.md`;
+  // Agent 文件路径（动态从 ai-config 的 agent_dir 读取，默认 .openclaw）
+  let AGENT_DIR = `${window.__homeDir || '~'}/.openclaw/agents/qq-pet`;
+  let SOUL_PATH     = `${AGENT_DIR}/SOUL.md`;
+  let IDENTITY_PATH = `${AGENT_DIR}/IDENTITY.md`;
+  let MEMORY_FILE_PATH = `${AGENT_DIR}/memory/MEMORY.md`;
+
+  function updateAgentPaths(agentDir) {
+    if (!agentDir) return;
+    AGENT_DIR = String(agentDir).replace(/^~/, window.__homeDir || '~');
+    SOUL_PATH = `${AGENT_DIR}/SOUL.md`;
+    IDENTITY_PATH = `${AGENT_DIR}/IDENTITY.md`;
+    MEMORY_FILE_PATH = `${AGENT_DIR}/memory/MEMORY.md`;
+    console.log(`🧠 Agent 路径已更新: ${AGENT_DIR}`);
+  }
 
   async function loadSoul() {
     try {
@@ -72,12 +83,17 @@ const AIBrain = (() => {
     try {
       if (window.electronAPI && window.electronAPI.getAIConfig) {
         const config = await window.electronAPI.getAIConfig();
-        if (config && config.provider && config.provider !== 'local') {
-          AI_PROVIDER = config.provider;
+        // 更新 Agent 文件路径（无论 provider 是什么都要更新）
+        if (config && config.agent_dir) {
+          updateAgentPaths(config.agent_dir);
+        }
+        // 只要有 api_url 就认为可用（不再严格要求 provider 非 local）
+        if (config && config.api_url) {
+          AI_PROVIDER = config.provider || 'openclaw';
           API_URL = config.api_url || '';
           API_KEY = config.api_key || '';
           MODEL = config.model || '';
-          console.log(`🧠 AI 配置已加载: provider=${AI_PROVIDER}, model=${MODEL}`);
+          console.log(`🧠 AI 配置已加载: provider=${AI_PROVIDER}, model=${MODEL}, url=${API_URL}`);
           return true;
         }
       }
@@ -93,6 +109,7 @@ const AIBrain = (() => {
   let apiCallsToday = 0;
   let apiCallsDate = '';
   const MAX_DAILY_CALLS = 500;
+  let consecutiveFailures = 0;  // 连续失败计数，用于触发配置恢复
 
   // ─── 最近说过的话（去重用） ───
   const recentSpeech = [];
@@ -254,9 +271,19 @@ const AIBrain = (() => {
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
+      consecutiveFailures++;
+      // 连续失败 3 次后，尝试重新加载配置（可能端口变了）
+      if (consecutiveFailures >= 3) {
+        console.warn('🧠 连续 AI 调用失败，尝试重新加载配置...');
+        consecutiveFailures = 0;
+        loadAIConfig().then(ok => {
+          if (ok) console.log('🧠 AI 配置已自动恢复');
+        }).catch(() => {});
+      }
       throw new Error(`API ${res.status}: ${errText.substring(0, 100)}`);
     }
 
+    consecutiveFailures = 0;  // 成功则重置
     const data = await res.json();
     const reply = extractReply(data);
     if (!reply) throw new Error('AI返回为空');

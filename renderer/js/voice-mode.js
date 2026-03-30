@@ -114,6 +114,23 @@ const VoiceMode = (() => {
     }
 
     registerKeyBindings();
+
+    // 监听 ASR 配置更新（用户在设置面板保存后触发），自动刷新可用性
+    if (window.electronAPI && window.electronAPI.onAsrConfigUpdated) {
+      window.electronAPI.onAsrConfigUpdated(async () => {
+        console.log('🎤 收到 asr-config-updated，重新检测 ASR 可用性...');
+        if (window.electronAPI.asrCheck) {
+          try {
+            const result = await window.electronAPI.asrCheck();
+            asrAvailable = result.available;
+            console.log(`🎤 ASR 可用性已刷新: ${asrAvailable ? '可用 ✅' : '不可用 ❌'}`);
+          } catch (e) {
+            console.warn('🎤 ASR 重新检测失败:', e);
+          }
+        }
+      });
+    }
+
     console.log('🎤 语音模式初始化完成 (腾讯云 ASR 流式识别)');
   }
 
