@@ -1607,27 +1607,62 @@ async function installerProbePort(port, token = '') {
     const url = `http://127.0.0.1:${port}/v1/models`;
     const headers = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const res = await fetch(url, { method: 'GET', headers, signal: AbortSignal.timeout(1200) });
-    return res.status === 200 || res.status === 401 || res.status === 403;
-  } catch { return false; }
+    const res = await fetch(url, { method: 'GET', headers, signal: AbortSignal.timeout(1500) });
+    const alive = res.status === 200 || res.status === 401 || res.status === 403;
+    if (!alive) return { alive: false, detectedType: null };
+    let detectedType = null;
+    if (res.status === 200) {
+      try {
+        const body = await res.json();
+        const modelIds = (body?.data || []).map(m => String(m?.id || '').toLowerCase()).join(' ');
+        const bodyStr  = JSON.stringify(body).toLowerCase();
+        if (bodyStr.includes('openclaw') || modelIds.includes('openclaw')) detectedType = 'openclaw';
+        else if (bodyStr.includes('qqclaw') || modelIds.includes('qqclaw')) detectedType = 'qqclaw';
+        const serverName = String(body?.server_name || body?.server_type || '').toLowerCase();
+        if (!detectedType && serverName.includes('openclaw')) detectedType = 'openclaw';
+        else if (!detectedType && serverName.includes('qqclaw')) detectedType = 'qqclaw';
+      } catch {}
+    }
+    return { alive: true, detectedType };
+  } catch { return { alive: false, detectedType: null }; }
+}
+
+function installerReadClawConfigFrom(configPath) {
+  try {
+    if (!fs.existsSync(configPath)) return null;
+    const cfg = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    const token = String(cfg?.token || cfg?.gateway?.auth?.token || '').trim();
+    const cfgPort = String(cfg?.gateway?.port || cfg?.gateway?.apiPort || '').trim();
+    const modelRaw = cfg?.agents?.defaults?.model;
+    const model = String(
+      typeof modelRaw === 'string' ? modelRaw : (modelRaw?.primary || modelRaw?.name || '')
+    ).trim();
+    return { token, port: cfgPort, model, source: configPath };
+  } catch { return null; }
 }
 
 function installerReadLocalClawConfig() {
-  const candidates = [
-    path.join(os.homedir(), '.qqclaw', 'openclaw.json'),
-    path.join(os.homedir(), '.openclaw', 'openclaw.json'),
-  ];
-  for (const cp of candidates) {
-    if (!fs.existsSync(cp)) continue;
-    try {
-      const cfg = JSON.parse(fs.readFileSync(cp, 'utf-8'));
-      const token = String(cfg?.token || cfg?.gateway?.auth?.token || '').trim();
-      const cfgPort = String(cfg?.gateway?.port || cfg?.gateway?.apiPort || '').trim();
-      const model = String(cfg?.agents?.defaults?.model?.primary || '').trim();
-      if (token || cfgPort) return { token, port: cfgPort, model, source: cp };
-    } catch {}
-  }
+  const HOME = os.homedir();
+  const ocCfg = installerReadClawConfigFrom(path.join(HOME, '.openclaw', 'openclaw.json'));
+  const qqCfg = installerReadClawConfigFrom(path.join(HOME, '.qqclaw',  'openclaw.json'));
+  // openclaw 优先
+  if (ocCfg && (ocCfg.token || ocCfg.port)) return ocCfg;
+  if (qqCfg && (qqCfg.token || qqCfg.port)) return qqCfg;
   return { token: '', port: '', model: '', source: '' };
+}
+
+function installerGuessClawType(port, installed, configSource, detectedType) {
+  if (detectedType) return detectedType;
+  if (configSource) {
+    if (configSource.includes('/.openclaw/')) return 'openclaw';
+    if (configSource.includes('/.qqclaw/'))  return 'qqclaw';
+  }
+  if (installed.openclaw && !installed.qqclaw) return 'openclaw';
+  if (installed.qqclaw  && !installed.openclaw) return 'qqclaw';
+  const n = Number(port);
+  if (n === 19789) return 'qqclaw';
+  if (n === 18789) return 'openclaw';
+  return 'openclaw';
 }
 
 function installerGetAgentSrcDir() {
@@ -1664,10 +1699,10 @@ ipcMain.handle('scan-ports', async () => {
 
   let foundPort = null, foundType = null;
   for (const port of scanPorts) {
-    const ok = await installerProbePort(port, localCfg.token);
-    if (ok) {
+    const { alive, detectedType } = await installerProbePort(port, localCfg.token);
+    if (alive) {
       foundPort = port;
-      foundType = [18789, 19789].includes(port) ? 'qqclaw' : 'openclaw';
+      foundType = installerGuessClawType(port, installed, localCfg.source, detectedType);
       break;
     }
   }
@@ -1677,7 +1712,7 @@ ipcMain.handle('scan-ports', async () => {
     port:      foundPort,
     type:      foundType,
     token:     localCfg.token,
-    model:     localCfg.model || 'openclaw:main',
+    model:     localCfg.model || (foundType === 'qqclaw' ? 'qqclaw:main' : 'openclaw:main'),
     apiUrl:    foundPort ? `http://127.0.0.1:${foundPort}/v1/chat/completions` : '',
     installed,
     lsofPorts,
@@ -1748,6 +1783,7 @@ ipcMain.handle('open-url', async (_, url) => {
 
 // launch-pet：安装向导完成后启动宠物（关闭向导窗口 + 创建宠物窗口）
 ipcMain.on('launch-pet', () => {
+  installerCompleted = true;  // 标记：用户主动完成配置
   if (aiSetupWindow && !aiSetupWindow.isDestroyed()) aiSetupWindow.close();
   // 首次安装流程：installer 完成后才启动宠物
   launchPetApp();
@@ -3777,6 +3813,7 @@ function ensureUpdateConfig() {
  * 启动安装向导（作为子窗口，防止重入）
  */
 let aiSetupLaunched = false;
+let installerCompleted = false;  // 用户完成配置并点了「启动q宠」才为 true
 function launchInstallerIfNeeded() {
   if (aiSetupLaunched) return;
   aiSetupLaunched = true;
@@ -3817,8 +3854,13 @@ function launchInstallerIfNeeded() {
   aiSetupWindow.loadFile(installerPath);
   aiSetupWindow.on('closed', () => {
     aiSetupWindow = null;
-    // 兜底：用户直接关闭 installer 窗口（没点启动按钮），也要启动宠物
-    launchPetApp();
+    if (installerCompleted) {
+      // 用户点了「启动q宠」，launch-pet IPC 已经触发了 launchPetApp()，这里无需再做
+    } else {
+      // 用户直接关窗口（取消配置）→ 退出 App，不启动宠物
+      console.log('🐧 安装向导被取消，退出 App');
+      app.quit();
+    }
   });
   console.log(`🐧 首次启动，安装向导已打开: ${installerPath}`);
 }
