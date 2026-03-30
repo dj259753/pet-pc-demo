@@ -3574,13 +3574,55 @@ app.whenReady().then(async () => {
   }
 });
 
-app.on('will-quit', () => {
-  // 注销所有全局快捷键
-  globalShortcut.unregisterAll();
+/**
+ * 退出前强制释放子进程 / WebSocket / 托盘 / 定时器，避免 ffmpeg 或 ws 拖住进程无法退出
+ * （before-quit 在关闭窗口之前触发，适合先杀掉麦克风采集）
+ */
+function disposeQuitSidecars() {
+  stopClawMonitor();
+  stopFocusMonitor();
+  stopClipboardMonitor();
+  stopSystemSensors();
   if (updateCheckTimer) {
     clearInterval(updateCheckTimer);
     updateCheckTimer = null;
   }
+  try {
+    globalShortcut.unregisterAll();
+  } catch (_) { /* ignore */ }
+
+  if (micProcess) {
+    try {
+      micProcess.stdout?.removeAllListeners?.();
+      micProcess.stderr?.removeAllListeners?.();
+      micProcess.stdin?.removeAllListeners?.();
+    } catch (_) { /* ignore */ }
+    try {
+      micProcess.kill('SIGKILL');
+    } catch (_) { /* ignore */ }
+    micProcess = null;
+  }
+  if (asrWs) {
+    try {
+      asrWs.removeAllListeners();
+      asrWs.close();
+    } catch (_) { /* ignore */ }
+    asrWs = null;
+  }
+  if (tray) {
+    try {
+      tray.destroy();
+    } catch (_) { /* ignore */ }
+    tray = null;
+  }
+}
+
+app.on('before-quit', () => {
+  disposeQuitSidecars();
+});
+
+app.on('will-quit', () => {
+  disposeQuitSidecars();
 });
 
 app.on('window-all-closed', () => {

@@ -399,6 +399,47 @@ const AIBrain = (() => {
   function onStreamingReply(cb) { onStreamingReplyCallback = cb; }
 
   /**
+   * 从整段文本解析 OpenAI 兼容 SSE（用于 Content-Type 不准或兜底）
+   */
+  function parseSseDataLines(text) {
+    let accumulated = '';
+    for (const line of String(text).split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed === 'data: [DONE]') continue;
+      if (!trimmed.startsWith('data:')) continue;
+      try {
+        const json = JSON.parse(trimmed.slice(5).trim());
+        const delta = json?.choices?.[0]?.delta?.content || '';
+        if (delta) accumulated += delta;
+      } catch { /* ignore line */ }
+    }
+    return accumulated.trim();
+  }
+
+  /**
+   * 消费 chat 接口响应：支持 text/event-stream 与一次性 application/json
+   * （QQClaw / 部分网关在 stream:true 时仍返回 JSON，原先只读 SSE 会得到空回复并误判为断网）
+   */
+  async function consumeChatResponse(res) {
+    const ct = (res.headers.get('content-type') || '').toLowerCase();
+    if (ct.includes('text/event-stream') || ct.includes('event-stream')) {
+      const fromStream = (await readStream(res)).trim();
+      if (fromStream) return fromStream;
+      return '';
+    }
+    const text = await res.text();
+    const head = text.trimStart();
+    if (head.startsWith('data:') || head.startsWith('event:')) {
+      return parseSseDataLines(text);
+    }
+    try {
+      return (extractReply(JSON.parse(text)) || '').trim();
+    } catch {
+      return '';
+    }
+  }
+
+  /**
    * 解析 SSE 流，逐 token 累积并回调
    */
   async function readStream(res) {
@@ -555,8 +596,21 @@ const AIBrain = (() => {
       throw new Error(`API ${res.status}: ${errText.substring(0, 100)}`);
     }
 
-    // 流式读取
-    const reply = await readStream(res);
+    let reply = await consumeChatResponse(res);
+    // 仍为空时：再试一次非流式请求（部分本地网关只实现 JSON 模式）
+    if (!reply) {
+      const res2 = await fetch(API_URL, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ ...bodyBase, stream: false }),
+      });
+      apiCallsToday++;
+      if (!res2.ok) {
+        const errText = await res2.text().catch(() => '');
+        throw new Error(`API ${res2.status}: ${errText.substring(0, 100)}`);
+      }
+      reply = await consumeChatResponse(res2);
+    }
     if (!reply) throw new Error('AI返回为空');
 
     // ── 检测并执行 Soul 自我更新指令 ──
