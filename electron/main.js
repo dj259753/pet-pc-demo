@@ -1665,6 +1665,7 @@ function installerReadLocalClawConfig() {
   return { token: '', port: '', model: '', source: '' };
 }
 
+// 返回 { ok, permError, errorDetail }
 async function installerProbeChatEndpoint(url, token = '', model = 'openclaw:main') {
   try {
     const headers = { 'Content-Type': 'application/json' };
@@ -1672,7 +1673,7 @@ async function installerProbeChatEndpoint(url, token = '', model = 'openclaw:mai
     const res = await fetch(url, {
       method: 'POST',
       headers,
-      signal: AbortSignal.timeout(1800),
+      signal: AbortSignal.timeout(2500),
       body: JSON.stringify({
         model,
         messages: [{ role: 'user', content: 'ping' }],
@@ -1681,10 +1682,17 @@ async function installerProbeChatEndpoint(url, token = '', model = 'openclaw:mai
         stream: false,
       }),
     });
-    return res.status !== 404;
-  } catch { return false; }
+    if (res.status === 404) return { ok: false, permError: false, errorDetail: '' };
+    if (res.status === 401 || res.status === 403) {
+      let detail = '';
+      try { const b = await res.json(); detail = b?.error?.message || b?.message || ''; } catch {}
+      return { ok: false, permError: true, errorDetail: detail || `HTTP ${res.status}` };
+    }
+    return { ok: true, permError: false, errorDetail: '' };
+  } catch { return { ok: false, permError: false, errorDetail: '' }; }
 }
 
+// 返回 { url, permError, errorDetail }
 async function installerDetectChatApiUrl(port, token = '', model = 'openclaw:main') {
   const candidates = [
     `/v1/chat/completions`,
@@ -1693,11 +1701,14 @@ async function installerDetectChatApiUrl(port, token = '', model = 'openclaw:mai
     `/api/v1/chat/completions`,
     `/chat/completions`,
   ];
+  let lastPermError = false, lastErrorDetail = '';
   for (const pathname of candidates) {
     const url = `http://127.0.0.1:${port}${pathname}`;
-    if (await installerProbeChatEndpoint(url, token, model)) return url;
+    const r = await installerProbeChatEndpoint(url, token, model);
+    if (r.ok) return { url, permError: false, errorDetail: '' };
+    if (r.permError) { lastPermError = true; lastErrorDetail = r.errorDetail; }
   }
-  return '';
+  return { url: '', permError: lastPermError, errorDetail: lastErrorDetail };
 }
 
 function installerEnsureChatCompletionsEnabled(configPath) {
@@ -1779,20 +1790,32 @@ ipcMain.handle('scan-ports', async () => {
   }
 
   const model = localCfg.model || (foundType === 'qqclaw' ? 'qqclaw:main' : 'openclaw:main');
-  let apiUrl = foundPort ? await installerDetectChatApiUrl(foundPort, localCfg.token, model) : '';
+  const chatResult = foundPort ? await installerDetectChatApiUrl(foundPort, localCfg.token, model) : { url: '', permError: false, errorDetail: '' };
+  let apiUrl = chatResult.url;
   let needsRestart = false;
   let repairNote = '';
+  let permissionDenied = chatResult.permError;
+  let permissionDetail = chatResult.errorDetail;
 
-  if (foundPort && foundType === 'openclaw' && !apiUrl) {
-    const repaired = installerEnsureChatCompletionsEnabled(localCfg.source);
-    if (repaired.changed) {
-      needsRestart = true;
-      repairNote = '已自动开启 OpenClaw 的 HTTP chatCompletions 端点，请重启 OpenClaw 后重新检测';
-    } else if (repaired.error) {
-      repairNote = `未检测到可用对话接口，且自动修复失败：${repaired.error}`;
+  if (foundPort && !apiUrl && !permissionDenied) {
+    if (foundType === 'openclaw') {
+      const repaired = installerEnsureChatCompletionsEnabled(localCfg.source);
+      if (repaired.changed) {
+        needsRestart = true;
+        repairNote = '已自动开启 OpenClaw 的 HTTP chatCompletions 端点，请重启 OpenClaw 后重新检测';
+      } else if (repaired.error) {
+        repairNote = `未检测到可用对话接口，且自动修复失败：${repaired.error}`;
+      } else {
+        repairNote = '未检测到可用的 OpenAI 兼容对话接口，请检查 OpenClaw 网关配置';
+      }
     } else {
-      repairNote = '未检测到可用的 OpenAI 兼容对话接口，请检查 OpenClaw 网关配置';
+      repairNote = '未检测到可用的 OpenAI 兼容对话接口，请检查网关配置';
     }
+  }
+
+  if (permissionDenied) {
+    apiUrl = `http://127.0.0.1:${foundPort}/v1/chat/completions`;
+    repairNote = `Token 权限不足：${permissionDetail || '缺少 operator.write 权限'}。请在网关配置中为 token 添加写入权限后重新检测`;
   }
 
   return {
@@ -1802,9 +1825,11 @@ ipcMain.handle('scan-ports', async () => {
     token:     localCfg.token,
     model,
     apiUrl,
-    chatReady: !!apiUrl,
+    chatReady: !!apiUrl && !permissionDenied,
     needsRestart,
     repairNote,
+    permissionDenied,
+    permissionDetail,
     installed,
     lsofPorts,
   };

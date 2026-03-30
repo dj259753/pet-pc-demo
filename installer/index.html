@@ -685,6 +685,8 @@ async function runScan(forcedData = null) {
     const n = scanData.type==='qqclaw'?'QQClaw':'OpenClaw';
     if (scanData.chatReady) {
       hint.textContent=`已发现 ${n} 活跃端口 :${scanData.port}，点击「继续」完成配置`;
+    } else if (scanData.permissionDenied) {
+      hint.textContent=`已发现 ${n}，但 Token 权限不足（${scanData.permissionDetail||'缺少写入权限'}）。请在 ${n} 配置中为 Token 添加 operator.write 权限后重新检测`;
     } else if (scanData.needsRestart) {
       hint.textContent=`已发现 ${n}，但对话接口尚未生效。已自动修复配置，请重启 ${n} 后重新检测`;
     } else {
@@ -733,6 +735,9 @@ function fillFound() {
   if (scanData.chatReady) {
     document.getElementById('found-desc').textContent=`检测到端口 :${scanData.port} 活跃，已自动读取接口地址`;
     document.getElementById('found-url').textContent=scanData.apiUrl;
+  } else if (scanData.permissionDenied) {
+    document.getElementById('found-desc').textContent='检测到网关正在运行，但当前 Token 权限不足，无法发起对话请求。请为 Token 添加 operator.write 权限后重新检测。';
+    document.getElementById('found-url').textContent=scanData.repairNote||scanData.permissionDetail||'权限不足';
   } else if (scanData.needsRestart) {
     document.getElementById('found-desc').textContent='检测到网关正在运行，但当前实例未开放兼容对话接口。已自动修复配置，请重启后重新检测。';
     document.getElementById('found-url').textContent=scanData.repairNote||'未检测到可用 chat endpoint';
