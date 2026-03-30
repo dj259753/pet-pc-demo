@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // ─── 屏幕 & 窗口 ───
   getScreenSize: () => ipcRenderer.invoke('get-screen-size'),
+  getScreenContext: () => ipcRenderer.invoke('get-screen-context'),
   getWindowPosition: () => ipcRenderer.invoke('get-window-position'),
   setWindowPosition: (pos) => ipcRenderer.send('set-window-position', pos),
   resizeWindow: (size) => ipcRenderer.send('resize-window', size),
@@ -111,6 +112,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
   asrStop: (opts) => ipcRenderer.invoke('asr-stop', opts || {}),
   onAsrStreamingResult: (callback) => ipcRenderer.on('asr-streaming-result', (_, data) => callback(data)),
   onAsrVolume: (callback) => ipcRenderer.on('asr-volume', (_, data) => callback(data)),
+  onAsrMicPermissionDenied: (callback) => ipcRenderer.on('asr-mic-permission-denied', () => callback()),
+
+  // ─── 麦克风系统权限（macOS） ───
+  checkMicPermission:  () => ipcRenderer.invoke('check-mic-permission'),
+  requestMicPermission: () => ipcRenderer.invoke('request-mic-permission'),
+  openMicSystemPrefs:  () => ipcRenderer.invoke('open-mic-system-prefs'),
+
+  // ─── 日志管理 ───
+  getLogFiles:       () => ipcRenderer.invoke('get-log-files'),
+  readLogTail:       (opts) => ipcRenderer.invoke('read-log-tail', opts || {}),
+  openLogDir:        () => ipcRenderer.invoke('open-log-dir'),
+  collectDiagnostics: () => ipcRenderer.invoke('collect-diagnostics'),
 
   // ─── 语音识别字幕（屏幕中下方独立窗口） ───
   subtitleShow: (text) => ipcRenderer.send('subtitle-show', { text }),

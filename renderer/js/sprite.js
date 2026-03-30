@@ -571,8 +571,9 @@ const SpriteRenderer = (() => {
     }, 60000);
   }
 
-  /** 强制切换动画（无视锁定） */
+  /** 强制切换动画（无视锁定，但退出流程不可打断） */
   function forceSetAnimation(name) {
+    if (isExiting) return;
     animLocked = false;
     animOnComplete = null;
     stopPolling();
@@ -658,6 +659,9 @@ const SpriteRenderer = (() => {
     forceSetAnimation,
     registerSheet,
     getFrameIndex,
+    /** 退出前调用，锁定后所有动画替换均拒绝 */
+    setExiting() { isExiting = true; },
+    get isExiting() { return isExiting; },
     get currentAnim() { return currentAnim; },
     // QC 动画接口
     get qcLoaded() { return qcLoaded; },

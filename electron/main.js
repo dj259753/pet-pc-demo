@@ -1,10 +1,68 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, dialog, globalShortcut, shell } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, dialog, globalShortcut, shell, systemPreferences } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const { exec, execSync, spawn } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
+
+// ─── 持久化日志系统 ───
+const LOG_DIR = path.join(os.homedir(), '.qq-pet', 'logs');
+const MAX_LOG_SIZE = 5 * 1024 * 1024; // 5MB 单文件上限
+const MAX_LOG_FILES = 7;               // 最多保留7个日志文件
+let logStream = null;
+
+function ensureLogDir() {
+  try { fs.mkdirSync(LOG_DIR, { recursive: true }); } catch {}
+}
+
+function getLogFilePath() {
+  const d = new Date();
+  const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return path.join(LOG_DIR, `qq-pet-${dateStr}.log`);
+}
+
+function rotateLogsIfNeeded() {
+  try {
+    const files = fs.readdirSync(LOG_DIR)
+      .filter(f => f.startsWith('qq-pet-') && f.endsWith('.log'))
+      .sort();
+    while (files.length > MAX_LOG_FILES) {
+      const oldest = files.shift();
+      try { fs.unlinkSync(path.join(LOG_DIR, oldest)); } catch {}
+    }
+  } catch {}
+}
+
+function writeLog(level, ...args) {
+  const ts = new Date().toISOString();
+  const line = `[${ts}] [${level}] ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}\n`;
+  try {
+    const logPath = getLogFilePath();
+    // 如果超过上限就截断（清空后重写）
+    try {
+      const stat = fs.statSync(logPath);
+      if (stat.size > MAX_LOG_SIZE) {
+        fs.writeFileSync(logPath, `[${ts}] [LOG] --- 日志文件已达上限，自动截断 ---\n`);
+      }
+    } catch {} // 文件不存在也没关系
+    fs.appendFileSync(logPath, line);
+  } catch {}
+}
+
+// 劫持 console.log / console.warn / console.error，同时写文件
+ensureLogDir();
+rotateLogsIfNeeded();
+const _origLog  = console.log.bind(console);
+const _origWarn = console.warn.bind(console);
+const _origErr  = console.error.bind(console);
+console.log   = (...args) => { _origLog(...args);  writeLog('INFO',  ...args); };
+console.warn  = (...args) => { _origWarn(...args); writeLog('WARN',  ...args); };
+console.error = (...args) => { _origErr(...args);  writeLog('ERROR', ...args); };
+
+console.log('═══════════════════════════════════════════');
+console.log('🐧 QQ宠物主进程启动，日志目录:', LOG_DIR);
+console.log('═══════════════════════════════════════════');
 
 // ─── Chromium 渲染优化 ───
 // Electron 28 / Chromium 120 渲染进程在 fontations_ffi (skrifa) 中有空指针崩溃风险
@@ -314,9 +372,47 @@ ipcMain.on('drag-end', () => {
 });
 
 // 屏幕/窗口
+function getVirtualWorkAreaBounds() {
+  const displays = screen.getAllDisplays();
+  const workAreas = displays.map(display => display.workArea);
+  const minX = Math.min(...workAreas.map(area => area.x));
+  const minY = Math.min(...workAreas.map(area => area.y));
+  const maxX = Math.max(...workAreas.map(area => area.x + area.width));
+  const maxY = Math.max(...workAreas.map(area => area.y + area.height));
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+  };
+}
+
+function getCurrentDisplayWorkArea() {
+  if (!mainWindow) return screen.getPrimaryDisplay().workArea;
+  const bounds = mainWindow.getBounds();
+  const centerPoint = {
+    x: Math.round(bounds.x + bounds.width / 2),
+    y: Math.round(bounds.y + bounds.height / 2),
+  };
+  return screen.getDisplayNearestPoint(centerPoint).workArea;
+}
+
 ipcMain.handle('get-screen-size', () => {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
   return { width, height };
+});
+
+ipcMain.handle('get-screen-context', () => {
+  const currentDisplay = getCurrentDisplayWorkArea();
+  return {
+    currentDisplay: {
+      x: currentDisplay.x,
+      y: currentDisplay.y,
+      width: currentDisplay.width,
+      height: currentDisplay.height,
+    },
+    virtualBounds: getVirtualWorkAreaBounds(),
+  };
 });
 
 ipcMain.handle('get-window-position', () => {
@@ -415,12 +511,14 @@ ipcMain.handle('open-local-path', async (event, filePath) => {
 // ═══════════════════════════════════════════
 
 const AGENT_WORKSPACE_DIR = path.join(os.homedir(), '.openclaw', 'agents', 'qq-pet');
+const AGENT_WORKSPACE_DIR_QQ = path.join(os.homedir(), '.qqclaw', 'agents', 'qq-pet');
 const PET_CONFIG_DIR_PATH  = path.join(os.homedir(), '.qq-pet');
 
 function isPathAllowed(filePath) {
   const normalized = path.resolve(filePath);
   return (
     normalized.startsWith(path.resolve(AGENT_WORKSPACE_DIR)) ||
+    normalized.startsWith(path.resolve(AGENT_WORKSPACE_DIR_QQ)) ||
     normalized.startsWith(path.resolve(PET_CONFIG_DIR_PATH))
   );
 }
@@ -2560,7 +2658,57 @@ ipcMain.handle('save-asr-config', (event, data) => {
   }
 });
 
-// 检测 ASR 可用性
+// 检测系统麦克风权限（macOS 沙盒用，ffmpeg 需要系统授权才能采集）
+ipcMain.handle('check-mic-permission', async () => {
+  try {
+    if (process.platform !== 'darwin') {
+      return { status: 'granted', platform: process.platform };
+    }
+    const status = systemPreferences.getMediaAccessStatus('microphone');
+    console.log(`🎤 系统麦克风权限状态: ${status}`);
+    return { status }; // 'not-determined' | 'denied' | 'restricted' | 'granted'
+  } catch (e) {
+    console.warn('🎤 检测麦克风权限失败:', e.message);
+    return { status: 'unknown', error: e.message };
+  }
+});
+
+// 请求系统麦克风权限（首次会弹出系统对话框；已拒绝的需跳转系统偏好设置）
+ipcMain.handle('request-mic-permission', async () => {
+  try {
+    if (process.platform !== 'darwin') {
+      return { granted: true };
+    }
+    const current = systemPreferences.getMediaAccessStatus('microphone');
+    if (current === 'granted') return { granted: true, status: 'granted' };
+    if (current === 'denied' || current === 'restricted') {
+      // 已拒绝，只能引导用户去系统偏好设置
+      console.warn('🎤 麦克风权限被拒绝，引导用户去系统偏好设置');
+      return { granted: false, status: current, needSystemPrefs: true };
+    }
+    // not-determined → 弹出请求
+    const granted = await systemPreferences.askForMediaAccess('microphone');
+    console.log(`🎤 请求麦克风权限结果: ${granted ? '已授权' : '已拒绝'}`);
+    return { granted, status: granted ? 'granted' : 'denied' };
+  } catch (e) {
+    console.warn('🎤 请求麦克风权限失败:', e.message);
+    return { granted: false, error: e.message };
+  }
+});
+
+// 打开系统偏好设置 → 隐私 → 麦克风（引导用户手动开启）
+ipcMain.handle('open-mic-system-prefs', async () => {
+  try {
+    await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone');
+    return { ok: true };
+  } catch (e) {
+    // 兜底：打开系统偏好设置首页
+    try { await shell.openExternal('x-apple.systempreferences:'); } catch {}
+    return { ok: false, error: e.message };
+  }
+});
+
+// 检测 ASR 可用性（同时检查麦克风权限）
 ipcMain.handle('asr-check', async () => {
   const { cfg, configPath } = loadAsrConfig();
   const missing = validateAsrConfig(cfg);
@@ -2572,7 +2720,21 @@ ipcMain.handle('asr-check', async () => {
       configPath,
     };
   }
-  return { available: true, engine: 'tencent-cloud-asr', configPath };
+  // 额外检查系统麦克风权限
+  let micStatus = 'unknown';
+  try {
+    if (process.platform === 'darwin') {
+      micStatus = systemPreferences.getMediaAccessStatus('microphone');
+    } else {
+      micStatus = 'granted';
+    }
+  } catch {}
+  return {
+    available: true,
+    engine: 'tencent-cloud-asr',
+    configPath,
+    micStatus,               // 透传给渲染进程做权限提示
+  };
 });
 
 // 开始流式识别会话：建立到腾讯云的 WebSocket 连接 + 启动 ffmpeg 麦克风采集
@@ -2698,6 +2860,25 @@ ipcMain.handle('asr-start', async () => {
     }
 
     // 第二步：启动 ffmpeg 采集麦克风，输出 16kHz 16bit mono PCM 到 stdout
+    // 先检查系统麦克风权限
+    if (process.platform === 'darwin') {
+      const micStatus = systemPreferences.getMediaAccessStatus('microphone');
+      console.log(`🎤 启动 ffmpeg 前检查麦克风权限: ${micStatus}`);
+      if (micStatus !== 'granted') {
+        if (micStatus === 'not-determined') {
+          const granted = await systemPreferences.askForMediaAccess('microphone');
+          if (!granted) {
+            console.warn('🎤 用户拒绝了麦克风权限');
+            try { if (asrWs) asrWs.close(); } catch {} asrWs = null;
+            return { error: 'mic-denied', message: '需要麦克风权限才能使用语音功能。请在「系统设置 → 隐私与安全性 → 麦克风」中允许 QQ宠物 访问。' };
+          }
+        } else {
+          console.warn(`🎤 麦克风权限: ${micStatus}，无法启动 ffmpeg`);
+          try { if (asrWs) asrWs.close(); } catch {} asrWs = null;
+          return { error: 'mic-denied', message: `麦克风权限：${micStatus}。请前往「系统设置 → 隐私与安全性 → 麦克风」开启。` };
+        }
+      }
+    }
     try {
       const ffmpegPath = '/opt/homebrew/bin/ffmpeg';
       micProcess = spawn(ffmpegPath, [
@@ -2754,7 +2935,16 @@ ipcMain.handle('asr-start', async () => {
 
       micProcess.stderr.on('data', (data) => {
         const msg = data.toString().trim();
-        if (msg) console.log('🎤 ffmpeg info:', msg);
+        if (msg) {
+          console.log('🎤 ffmpeg info:', msg);
+          // 检测权限拒绝
+          if (/permission denied|not authorized|access denied|couldn't use.*avfoundation/i.test(msg)) {
+            console.error('🎤 ⚠️ ffmpeg 麦克风权限被拒绝！');
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('asr-mic-permission-denied');
+            }
+          }
+        }
       });
 
       micProcess.on('error', (err) => {
@@ -3437,6 +3627,119 @@ function copyDirSync(src, dst) {
     }
   }
 }
+
+// ═══════════════════════════════════════════
+// 📋 日志管理 IPC
+// ═══════════════════════════════════════════
+
+// 获取日志文件列表（最近 N 个）
+ipcMain.handle('get-log-files', () => {
+  try {
+    if (!fs.existsSync(LOG_DIR)) return { ok: true, files: [] };
+    const files = fs.readdirSync(LOG_DIR)
+      .filter(f => f.startsWith('qq-pet-') && f.endsWith('.log'))
+      .sort()
+      .reverse()
+      .slice(0, MAX_LOG_FILES)
+      .map(f => {
+        const fp = path.join(LOG_DIR, f);
+        let size = 0;
+        try { size = fs.statSync(fp).size; } catch {}
+        return { name: f, path: fp, size };
+      });
+    return { ok: true, files, logDir: LOG_DIR };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// 读取指定日志文件的最后 N 行（默认 500 行）
+ipcMain.handle('read-log-tail', (event, { filePath: fp, lines = 500 } = {}) => {
+  try {
+    const target = fp ? String(fp) : getLogFilePath();
+    if (!target.startsWith(LOG_DIR)) return { ok: false, error: '路径不允许' };
+    if (!fs.existsSync(target)) return { ok: true, content: '' };
+    const content = fs.readFileSync(target, 'utf-8');
+    const allLines = content.split('\n');
+    const tail = allLines.slice(-lines).join('\n');
+    return { ok: true, content: tail, totalLines: allLines.length };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// 打开日志目录（Finder）
+ipcMain.handle('open-log-dir', async () => {
+  try {
+    ensureLogDir();
+    await shell.openPath(LOG_DIR);
+    return { ok: true, logDir: LOG_DIR };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// 收集诊断包：把日志 + ai-config(脱敏) + system-settings + asr状态 打包成一段文字
+ipcMain.handle('collect-diagnostics', () => {
+  try {
+    const diag = [];
+    diag.push('═══════════ QQ宠物诊断报告 ═══════════');
+    diag.push(`时间: ${new Date().toISOString()}`);
+    diag.push(`平台: ${process.platform} ${os.release()}`);
+    diag.push(`App版本: ${getCurrentVersion()}`);
+    diag.push('');
+
+    // AI配置状态（脱敏）
+    try {
+      const cfgPath = path.join(os.homedir(), '.qq-pet', 'config', 'ai-config.json');
+      if (fs.existsSync(cfgPath)) {
+        const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+        diag.push('─── AI配置 ───');
+        diag.push(`provider: ${cfg.provider}`);
+        diag.push(`api_url: ${cfg.api_url}`);
+        diag.push(`model: ${cfg.model}`);
+        diag.push(`api_key: ${cfg.api_key ? '已设置(已脱敏)' : '未设置'}`);
+        diag.push(`agent_dir: ${cfg.agent_dir}`);
+        diag.push('');
+      }
+    } catch {}
+
+    // ASR配置状态（脱敏）
+    try {
+      const { cfg: asrCfg } = loadAsrConfig();
+      diag.push('─── ASR配置 ───');
+      diag.push(`appId: ${asrCfg.appId ? '已设置' : '未设置'}`);
+      diag.push(`secretId: ${asrCfg.secretId ? '已设置' : '未设置'}`);
+      diag.push(`secretKey: ${asrCfg.secretKey ? '已设置(已脱敏)' : '未设置'}`);
+      diag.push(`engineModel: ${asrCfg.engineModelType}`);
+      diag.push('');
+    } catch {}
+
+    // 系统麦克风权限
+    try {
+      if (process.platform === 'darwin') {
+        const micStatus = systemPreferences.getMediaAccessStatus('microphone');
+        diag.push(`麦克风权限: ${micStatus}`);
+        diag.push('');
+      }
+    } catch {}
+
+    // 最近50行日志
+    try {
+      const logPath = getLogFilePath();
+      if (fs.existsSync(logPath)) {
+        const lines = fs.readFileSync(logPath, 'utf-8').split('\n').slice(-50);
+        diag.push('─── 最近日志(最后50行) ───');
+        diag.push(lines.join('\n'));
+      }
+    } catch {}
+
+    diag.push('═══════════════════════════════════════');
+    return { ok: true, report: diag.join('\n') };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
 
 /**
  * 判断是否已完成过配置（有 ai-config.json 就认为走过引导）
