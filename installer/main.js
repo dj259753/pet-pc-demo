@@ -88,8 +88,12 @@ function readLocalClawConfig() {
   return { token: '', port: '', model: '', source: '' };
 }
 
-// 判断端口归属
-function guessClawType(port) {
+// 判断端口归属：优先按安装目录判断，兜底才按端口号猜
+function guessClawType(port, installed) {
+  // 如果只安装了其中一个，直接定论
+  if (installed.openclaw && !installed.qqclaw) return 'openclaw';
+  if (installed.qqclaw  && !installed.openclaw) return 'qqclaw';
+  // 两者都装或都没装：18789/19789 是 QQClaw 默认端口，其余按 openclaw
   const n = Number(port);
   if ([18789, 19789].includes(n)) return 'qqclaw';
   return 'openclaw';
@@ -132,7 +136,7 @@ ipcMain.handle('scan-ports', async () => {
     const ok = await probePort(port, localCfg.token);
     if (ok) {
       foundPort = port;
-      foundType = guessClawType(port);
+      foundType = guessClawType(port, installed);
       break;
     }
   }
