@@ -81,6 +81,7 @@ const SystemSettings = (() => {
     const appIdInput = document.getElementById('setting-asr-appid');
     const secretIdInput = document.getElementById('setting-asr-secretid');
     const statusEl = document.getElementById('setting-asr-status');
+    const micStatusEl = document.getElementById('setting-mic-status');
     if (appIdInput) appIdInput.value = asrCfg.appId || '';
     if (secretIdInput) secretIdInput.value = asrCfg.secretId || '';
     // secretKey 不回填，只展示状态
@@ -88,6 +89,21 @@ const SystemSettings = (() => {
       const ok = !!(asrCfg.appId && asrCfg.secretId && asrCfg.secretKeySet);
       statusEl.textContent = ok ? '✅ 已配置' : (asrCfg.appId || asrCfg.secretId ? '⚠️ 配置不完整' : '❌ 未配置');
       statusEl.style.color = ok ? '#4ade80' : (asrCfg.appId || asrCfg.secretId ? '#fbbf24' : '#f87171');
+    }
+    // 麦克风权限状态
+    if (micStatusEl) {
+      const permMap = {
+        granted:          { text: '✅ 已授权', color: '#4ade80' },
+        'not-determined': { text: '⚠️ 未授权（点击授权）', color: '#fbbf24' },
+        denied:           { text: '❌ 已拒绝（点击去开启）', color: '#f87171' },
+        restricted:       { text: '❌ 受限制', color: '#f87171' },
+        unknown:          { text: '— 未知', color: '#9ca3af' },
+      };
+      const micPerm = typeof VoiceMode !== 'undefined' ? VoiceMode.micPermStatus : 'unknown';
+      const info = permMap[micPerm] || permMap['unknown'];
+      micStatusEl.textContent = info.text;
+      micStatusEl.style.color = info.color;
+      micStatusEl.style.cursor = (micPerm !== 'granted') ? 'pointer' : 'default';
     }
   }
 
@@ -196,6 +212,71 @@ const SystemSettings = (() => {
           await window.electronAPI.openAiSetup();
         } else {
           BubbleSystem.show('AI 配置向导不可用', 2200);
+        }
+      });
+    }
+
+    // ─── 麦克风权限授权 ───
+    const micStatusEl = document.getElementById('setting-mic-status');
+    if (micStatusEl) {
+      micStatusEl.addEventListener('click', async () => {
+        const micPerm = typeof VoiceMode !== 'undefined' ? VoiceMode.micPermStatus : 'unknown';
+        if (micPerm === 'granted') return;
+        if (micPerm === 'denied' || micPerm === 'restricted') {
+          // 打开系统偏好设置
+          BubbleSystem.show('正在打开系统设置...', 2000);
+          if (window.electronAPI?.openMicSystemPrefs) await window.electronAPI.openMicSystemPrefs();
+        } else {
+          // 请求权限
+          if (window.electronAPI?.requestMicPermission) {
+            const r = await window.electronAPI.requestMicPermission();
+            if (r.granted) {
+              BubbleSystem.show('🎤 麦克风已授权！', 2200);
+            } else if (r.needSystemPrefs) {
+              BubbleSystem.show('请在系统设置中开启麦克风权限', 2500);
+              if (window.electronAPI?.openMicSystemPrefs) await window.electronAPI.openMicSystemPrefs();
+            } else {
+              BubbleSystem.show('麦克风授权失败', 2200);
+            }
+            renderAsrStatus();
+          }
+        }
+      });
+    }
+
+    // ─── 导出诊断日志 ───
+    const btnExportLog = document.getElementById('setting-export-log');
+    if (btnExportLog) {
+      btnExportLog.addEventListener('click', async () => {
+        btnExportLog.textContent = '收集中...';
+        btnExportLog.disabled = true;
+        try {
+          if (window.electronAPI?.collectDiagnostics) {
+            const r = await window.electronAPI.collectDiagnostics();
+            if (r.ok) {
+              // 写入剪贴板
+              await navigator.clipboard.writeText(r.report);
+              BubbleSystem.show('📋 诊断日志已复制到剪贴板！可以直接发给开发者', 4000);
+            }
+          } else if (window.electronAPI?.openLogDir) {
+            await window.electronAPI.openLogDir();
+            BubbleSystem.show('📁 日志目录已打开', 2200);
+          }
+        } catch (e) {
+          BubbleSystem.show('导出失败: ' + e.message, 2600);
+        } finally {
+          btnExportLog.textContent = '📋 复制诊断日志';
+          btnExportLog.disabled = false;
+        }
+      });
+    }
+
+    // ─── 打开日志目录 ───
+    const btnOpenLog = document.getElementById('setting-open-log-dir');
+    if (btnOpenLog) {
+      btnOpenLog.addEventListener('click', async () => {
+        if (window.electronAPI?.openLogDir) {
+          await window.electronAPI.openLogDir();
         }
       });
     }

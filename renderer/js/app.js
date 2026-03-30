@@ -512,8 +512,17 @@
       let errMsg = '听不清楚...';
       if (error === 'not-supported') {
         errMsg = '语音功能不可用';
+      } else if (error === 'mic-denied') {
+        errMsg = '🎤 麦克风权限未开启\n请到「系统设置 → 隐私与安全性 → 麦克风」中开启';
+        // 尝试自动打开系统偏好设置
+        if (window.electronAPI?.openMicSystemPrefs) {
+          window.electronAPI.openMicSystemPrefs();
+        }
       } else if (error === 'not-allowed' || error === 'permission-denied') {
-        errMsg = '需要麦克风权限哦~';
+        errMsg = '🎤 需要麦克风权限\n请在系统设置中允许访问麦克风';
+        if (window.electronAPI?.openMicSystemPrefs) {
+          window.electronAPI.openMicSystemPrefs();
+        }
       } else if (error === 'asr-unavailable') {
         errMsg = '语音服务不可用，请检查网络或腾讯云配置';
       } else if (error === 'transcription-error') {

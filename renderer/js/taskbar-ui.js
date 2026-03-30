@@ -115,6 +115,9 @@ const TaskbarUI = (() => {
                 const exitAnim = pool[Math.floor(Math.random() * pool.length)];
                 console.log('🐧 播放退出动画:', exitAnim);
 
+                // ── 立即加退出锁，后续一切点击/互动/动画替换均无效 ──
+                SpriteRenderer.setExiting();
+
                 SpriteRenderer.loadQCSheet(exitAnim).then(() => {
                   SpriteRenderer.playOnce(exitAnim, () => {
                     window.electronAPI.quitApp();

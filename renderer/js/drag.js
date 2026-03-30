@@ -255,14 +255,29 @@ const DragSystem = (() => {
     petContainer.style.top = `${Math.round(metrics.petTop - lift)}px`;
   }
 
-  function getDragBounds(screenSize) {
+  function normalizeScreenContext(screenContext) {
+    const fallbackBounds = {
+      x: 0,
+      y: 0,
+      width: Number(screenContext?.width) || window.screen.width || 0,
+      height: Number(screenContext?.height) || window.screen.height || 0,
+    };
+    return {
+      virtualBounds: screenContext?.virtualBounds || fallbackBounds,
+      currentDisplay: screenContext?.currentDisplay || fallbackBounds,
+    };
+  }
+
+  function getDragBounds(screenContext) {
     const metrics = getPetAnchorMetrics();
-    const minY = -(metrics.petTop + metrics.headTopOffset);
-    const maxY = screenSize.height - metrics.winH;
+    const { virtualBounds } = normalizeScreenContext(screenContext);
+    // 横向和纵向都按整个扩展桌面算，防止跨屏时被主屏范围误夹
+    const minY = virtualBounds.y - (metrics.petTop + metrics.headTopOffset);
+    const maxY = virtualBounds.y + virtualBounds.height - metrics.winH;
     return {
       ...metrics,
-      minX: -metrics.petLeft,
-      maxX: screenSize.width - (metrics.petLeft + metrics.petWidth) + metrics.snapRightNudge,
+      minX: virtualBounds.x - metrics.petLeft,
+      maxX: virtualBounds.x + virtualBounds.width - (metrics.petLeft + metrics.petWidth) + metrics.snapRightNudge,
       minY,
       maxY,
     };
@@ -272,11 +287,11 @@ const DragSystem = (() => {
   async function enforceScreenBounds() {
     if (!window.electronAPI) return;
     try {
-      const [screenSize, winPos] = await Promise.all([
-        window.electronAPI.getScreenSize(),
+      const [screenContext, winPos] = await Promise.all([
+        window.electronAPI.getScreenContext(),
         window.electronAPI.getWindowPosition(),
       ]);
-      const bounds = getDragBounds(screenSize);
+      const bounds = getDragBounds(screenContext);
       let { x, y } = winPos;
       let clamped = false;
 

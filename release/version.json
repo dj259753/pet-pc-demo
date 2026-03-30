@@ -1,6 +1,6 @@
 {
-  "version": "0.2.3",
-  "release_notes": "修复ASR配置不生效、Skills安装路径、设置面板误关闭、AI配置重启失效",
+  "version": "0.2.4",
+  "release_notes": "多显示器拖拽支持、退出动画修复、installer端口判断优化、麦克风权限状态显示",
   "published_at": "2026-03-30",
-  "package_url": "https://github.com/dj259753/pet-pc-demo/releases/download/v0.2.3/QQ.-0.2.3-arm64-mac.zip"
+  "package_url": "https://github.com/dj259753/pet-pc-demo/releases/download/v0.2.4/QQ.-0.2.4-arm64-mac.zip"
 }

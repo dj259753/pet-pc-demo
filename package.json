@@ -1,6 +1,6 @@
 {
   "name": "qq-pet-skills",
-  "version": "0.2.3",
+  "version": "0.2.8",
   "description": "QQ宠物 - 基于 OpenClaw 多Agent架构的桌面宠物",
   "main": "electron/main.js",
   "author": "Jerry",

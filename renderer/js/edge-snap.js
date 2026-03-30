@@ -44,11 +44,24 @@ const EdgeSnap = (() => {
     return { w: winW, h: winH };
   }
 
-  function getVerticalBounds(screenH) {
+  function normalizeScreenContext(screenContext) {
+    const fallbackBounds = {
+      x: 0,
+      y: 0,
+      width: Number(screenContext?.width) || window.screen.width || 0,
+      height: Number(screenContext?.height) || window.screen.height || 0,
+    };
+    return {
+      currentDisplay: screenContext?.currentDisplay || fallbackBounds,
+      virtualBounds: screenContext?.virtualBounds || fallbackBounds,
+    };
+  }
+
+  function getVerticalBounds(displayBounds) {
     const metrics = getPetAnchorMetrics();
     return {
-      minY: -(metrics.petTop + metrics.headTopOffset),
-      maxY: screenH - metrics.winH,
+      minY: displayBounds.y - (metrics.petTop + metrics.headTopOffset),
+      maxY: displayBounds.y + displayBounds.height - metrics.winH,
     };
   }
 
@@ -57,30 +70,31 @@ const EdgeSnap = (() => {
     if (isSnapped || isAnimating) return;
 
     try {
-      const [screenSize, winPos] = await Promise.all([
-        window.electronAPI.getScreenSize(),
+      const [screenContext, winPos] = await Promise.all([
+        window.electronAPI.getScreenContext(),
         window.electronAPI.getWindowPosition(),
       ]);
 
       const metrics = getPetAnchorMetrics();
-      const { w: winW, h: winH } = getWinSize();
-      const { width: sW, height: sH } = screenSize;
+      const { currentDisplay } = normalizeScreenContext(screenContext);
+      const displayLeft = currentDisplay.x;
+      const displayRight = currentDisplay.x + currentDisplay.width;
       const { x, y } = winPos;
       const petLeftX = x + metrics.petLeft;
       const petRightX = petLeftX + metrics.petWidth;
 
-      if (petLeftX < SNAP_THRESHOLD) {
-        await snapToEdge('left', sW, sH, winW, winH, y);
+      if (petLeftX < displayLeft + SNAP_THRESHOLD) {
+        await snapToEdge('left', currentDisplay, y);
         return;
       }
 
-      if (petRightX > sW - SNAP_THRESHOLD) {
-        await snapToEdge('right', sW, sH, winW, winH, y);
+      if (petRightX > displayRight - SNAP_THRESHOLD) {
+        await snapToEdge('right', currentDisplay, y);
         return;
       }
 
       // 上下简单贴边
-      const { minY, maxY } = getVerticalBounds(sH);
+      const { minY, maxY } = getVerticalBounds(currentDisplay);
       let newY = y;
       if (y < minY + SNAP_THRESHOLD) newY = minY;
       else if (y > maxY - SNAP_THRESHOLD) newY = maxY;
@@ -90,7 +104,7 @@ const EdgeSnap = (() => {
     } catch (err) {}
   }
 
-  async function snapToEdge(side, screenW, screenH, winW, winH, currentY) {
+  async function snapToEdge(side, displayBounds, currentY) {
     isAnimating = true;
     isSnapped = true;
     snapSide = side;
@@ -101,14 +115,14 @@ const EdgeSnap = (() => {
 
     const metrics = getPetAnchorMetrics();
 
-    // 窗口定位：按企鹅本体边缘贴屏幕，而不是按整块透明窗口贴边
+    // 窗口定位：按当前显示器里的企鹅本体边缘贴边，而不是按整块透明窗口贴边
     let targetX;
     if (side === 'left') {
-      targetX = -metrics.petLeft;
+      targetX = displayBounds.x - metrics.petLeft;
     } else {
-      targetX = screenW - (metrics.petLeft + metrics.petWidth) - metrics.snapRightReveal + metrics.snapRightNudge;
+      targetX = displayBounds.x + displayBounds.width - (metrics.petLeft + metrics.petWidth) - metrics.snapRightReveal + metrics.snapRightNudge;
     }
-    const { minY, maxY } = getVerticalBounds(screenH);
+    const { minY, maxY } = getVerticalBounds(displayBounds);
     let targetY = Math.max(minY, Math.min(currentY, maxY));
     window.electronAPI.setWindowPosition({ x: targetX, y: targetY });
 
@@ -131,13 +145,13 @@ const EdgeSnap = (() => {
     const side = snapSide;
 
     try {
-      const [screenSize, winPos] = await Promise.all([
-        window.electronAPI.getScreenSize(),
+      const [screenContext, winPos] = await Promise.all([
+        window.electronAPI.getScreenContext(),
         window.electronAPI.getWindowPosition(),
       ]);
 
       const metrics = getPetAnchorMetrics();
-      const { width: sW } = screenSize;
+      const { currentDisplay } = normalizeScreenContext(screenContext);
       const mood = (typeof PetState !== 'undefined') ? (PetState.mood || 'peaceful') : 'peaceful';
 
       // 播出现动画
@@ -147,10 +161,10 @@ const EdgeSnap = (() => {
         SpriteRenderer.forceSetAnimation(appearName);
       }
 
-      // 窗口移回屏幕内（以企鹅本体留 10px 边距）
+      // 窗口移回当前显示器内（以企鹅本体留 10px 边距）
       let targetX = side === 'left'
-        ? 10 - metrics.petLeft
-        : sW - (metrics.petLeft + metrics.petWidth) - 10 + metrics.snapRightNudge;
+        ? currentDisplay.x + 10 - metrics.petLeft
+        : currentDisplay.x + currentDisplay.width - (metrics.petLeft + metrics.petWidth) - 10 + metrics.snapRightNudge;
       window.electronAPI.setWindowPosition({ x: targetX, y: winPos.y });
 
       // 切回 Stand

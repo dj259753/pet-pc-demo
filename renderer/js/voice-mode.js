@@ -15,6 +15,7 @@ const VoiceMode = (() => {
   let isBusy = false;          // 防止快速重复点击
   let isSupported = false;
   let asrAvailable = false;
+  let micPermStatus = 'unknown'; // 系统麦克风权限状态
 
   // ─── 流式识别缓存 ───
   let currentText = '';         // 当前流式识别的文字
@@ -80,11 +81,20 @@ const VoiceMode = (() => {
       try {
         const result = await window.electronAPI.asrCheck();
         asrAvailable = result.available;
-        console.log(`🎤 ASR (${result.engine}): ${asrAvailable ? '可用 ✅' : '不可用 ❌'}`);
+        if (result.micStatus) micPermStatus = result.micStatus;
+        console.log(`🎤 ASR (${result.engine}): ${asrAvailable ? '可用 ✅' : '不可用 ❌'}, 麦克风: ${micPermStatus}`);
       } catch (e) {
         console.warn('🎤 ASR 检测失败:', e);
         asrAvailable = false;
       }
+    }
+
+    // 单独检测麦克风权限（如果 asr-check 没返回 micStatus）
+    if (micPermStatus === 'unknown' && window.electronAPI?.checkMicPermission) {
+      try {
+        const mp = await window.electronAPI.checkMicPermission();
+        micPermStatus = mp.status || 'unknown';
+      } catch {}
     }
 
     // 监听主进程推送的流式识别结果（腾讯云 ASR 的结果从 WebSocket 回调推送）
@@ -123,10 +133,25 @@ const VoiceMode = (() => {
           try {
             const result = await window.electronAPI.asrCheck();
             asrAvailable = result.available;
+            if (result.micStatus) micPermStatus = result.micStatus;
             console.log(`🎤 ASR 可用性已刷新: ${asrAvailable ? '可用 ✅' : '不可用 ❌'}`);
           } catch (e) {
             console.warn('🎤 ASR 重新检测失败:', e);
           }
+        }
+      });
+    }
+
+    // 监听 ffmpeg 权限拒绝事件（来自主进程 stderr 检测）
+    if (window.electronAPI && window.electronAPI.onAsrMicPermissionDenied) {
+      window.electronAPI.onAsrMicPermissionDenied(() => {
+        console.warn('🎤 ffmpeg 报告麦克风权限被拒绝');
+        micPermStatus = 'denied';
+        if (isRecording) {
+          isRecording = false;
+          isSessionRunning = false;
+          if (onStopCallback) onStopCallback({ reason: 'mic-denied' });
+          if (onErrorCallback) onErrorCallback('mic-denied');
         }
       });
     }
@@ -185,6 +210,34 @@ const VoiceMode = (() => {
     if (!asrAvailable) {
       if (onErrorCallback) onErrorCallback('asr-unavailable');
       return false;
+    }
+
+    // ── 先检查系统麦克风权限（macOS 沙盒需要） ──
+    if (window.electronAPI && window.electronAPI.checkMicPermission) {
+      try {
+        const permResult = await window.electronAPI.checkMicPermission();
+        const permStatus = permResult.status;
+        console.log(`[Voice] 系统麦克风权限: ${permStatus}`);
+
+        if (permStatus === 'denied' || permStatus === 'restricted') {
+          // 已拒绝 → 给用户提示，引导去系统偏好设置
+          if (onErrorCallback) onErrorCallback('mic-denied');
+          return false;
+        }
+
+        if (permStatus === 'not-determined') {
+          // 未决定 → 主动请求
+          const reqResult = await window.electronAPI.requestMicPermission();
+          if (!reqResult.granted) {
+            if (onErrorCallback) onErrorCallback('mic-denied');
+            return false;
+          }
+          console.log('[Voice] ✅ 麦克风权限已获取');
+        }
+        // granted → 继续
+      } catch (e) {
+        console.warn('[Voice] 权限检测异常，继续尝试:', e);
+      }
     }
 
     try {
@@ -421,5 +474,6 @@ const VoiceMode = (() => {
     get isBusy() { return isBusy; },
     get isSupported() { return isSupported; },
     get asrAvailable() { return asrAvailable; },
+    get micPermStatus() { return micPermStatus; },
   };
 })();

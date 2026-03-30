@@ -1,10 +1,68 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, dialog, globalShortcut, shell } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, dialog, globalShortcut, shell, systemPreferences } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
 const { exec, execSync, spawn } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
+
+// ─── 持久化日志系统 ───
+const LOG_DIR = path.join(os.homedir(), '.qq-pet', 'logs');
+const MAX_LOG_SIZE = 5 * 1024 * 1024; // 5MB 单文件上限
+const MAX_LOG_FILES = 7;               // 最多保留7个日志文件
+let logStream = null;
+
+function ensureLogDir() {
+  try { fs.mkdirSync(LOG_DIR, { recursive: true }); } catch {}
+}
+
+function getLogFilePath() {
+  const d = new Date();
+  const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return path.join(LOG_DIR, `qq-pet-${dateStr}.log`);
+}
+
+function rotateLogsIfNeeded() {
+  try {
+    const files = fs.readdirSync(LOG_DIR)
+      .filter(f => f.startsWith('qq-pet-') && f.endsWith('.log'))
+      .sort();
+    while (files.length > MAX_LOG_FILES) {
+      const oldest = files.shift();
+      try { fs.unlinkSync(path.join(LOG_DIR, oldest)); } catch {}
+    }
+  } catch {}
+}
+
+function writeLog(level, ...args) {
+  const ts = new Date().toISOString();
+  const line = `[${ts}] [${level}] ${args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ')}\n`;
+  try {
+    const logPath = getLogFilePath();
+    // 如果超过上限就截断（清空后重写）
+    try {
+      const stat = fs.statSync(logPath);
+      if (stat.size > MAX_LOG_SIZE) {
+        fs.writeFileSync(logPath, `[${ts}] [LOG] --- 日志文件已达上限，自动截断 ---\n`);
+      }
+    } catch {} // 文件不存在也没关系
+    fs.appendFileSync(logPath, line);
+  } catch {}
+}
+
+// 劫持 console.log / console.warn / console.error，同时写文件
+ensureLogDir();
+rotateLogsIfNeeded();
+const _origLog  = console.log.bind(console);
+const _origWarn = console.warn.bind(console);
+const _origErr  = console.error.bind(console);
+console.log   = (...args) => { _origLog(...args);  writeLog('INFO',  ...args); };
+console.warn  = (...args) => { _origWarn(...args); writeLog('WARN',  ...args); };
+console.error = (...args) => { _origErr(...args);  writeLog('ERROR', ...args); };
+
+console.log('═══════════════════════════════════════════');
+console.log('🐧 QQ宠物主进程启动，日志目录:', LOG_DIR);
+console.log('═══════════════════════════════════════════');
 
 // ─── Chromium 渲染优化 ───
 // Electron 28 / Chromium 120 渲染进程在 fontations_ffi (skrifa) 中有空指针崩溃风险
@@ -314,9 +372,47 @@ ipcMain.on('drag-end', () => {
 });
 
 // 屏幕/窗口
+function getVirtualWorkAreaBounds() {
+  const displays = screen.getAllDisplays();
+  const workAreas = displays.map(display => display.workArea);
+  const minX = Math.min(...workAreas.map(area => area.x));
+  const minY = Math.min(...workAreas.map(area => area.y));
+  const maxX = Math.max(...workAreas.map(area => area.x + area.width));
+  const maxY = Math.max(...workAreas.map(area => area.y + area.height));
+  return {
+    x: minX,
+    y: minY,
+    width: maxX - minX,
+    height: maxY - minY,
+  };
+}
+
+function getCurrentDisplayWorkArea() {
+  if (!mainWindow) return screen.getPrimaryDisplay().workArea;
+  const bounds = mainWindow.getBounds();
+  const centerPoint = {
+    x: Math.round(bounds.x + bounds.width / 2),
+    y: Math.round(bounds.y + bounds.height / 2),
+  };
+  return screen.getDisplayNearestPoint(centerPoint).workArea;
+}
+
 ipcMain.handle('get-screen-size', () => {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
   return { width, height };
+});
+
+ipcMain.handle('get-screen-context', () => {
+  const currentDisplay = getCurrentDisplayWorkArea();
+  return {
+    currentDisplay: {
+      x: currentDisplay.x,
+      y: currentDisplay.y,
+      width: currentDisplay.width,
+      height: currentDisplay.height,
+    },
+    virtualBounds: getVirtualWorkAreaBounds(),
+  };
 });
 
 ipcMain.handle('get-window-position', () => {
@@ -415,12 +511,14 @@ ipcMain.handle('open-local-path', async (event, filePath) => {
 // ═══════════════════════════════════════════
 
 const AGENT_WORKSPACE_DIR = path.join(os.homedir(), '.openclaw', 'agents', 'qq-pet');
+const AGENT_WORKSPACE_DIR_QQ = path.join(os.homedir(), '.qqclaw', 'agents', 'qq-pet');
 const PET_CONFIG_DIR_PATH  = path.join(os.homedir(), '.qq-pet');
 
 function isPathAllowed(filePath) {
   const normalized = path.resolve(filePath);
   return (
     normalized.startsWith(path.resolve(AGENT_WORKSPACE_DIR)) ||
+    normalized.startsWith(path.resolve(AGENT_WORKSPACE_DIR_QQ)) ||
     normalized.startsWith(path.resolve(PET_CONFIG_DIR_PATH))
   );
 }
@@ -868,16 +966,19 @@ if [ -d "$TARGET" ]; then
   mv "$TARGET" "$BACKUP_DIR"
 fi
 
-# 覆盖：复制新版本到原位置（保持同名）
+# 用 ditto 复制（比 cp -R 更可靠，目标不存在时行为一致）
 echo "📦 复制新版本..."
-cp -R "$NEWAPP" "$TARGET"
+ditto "$NEWAPP" "$TARGET"
+
+# 清除 Gatekeeper 隔离标记
+xattr -dr com.apple.quarantine "$TARGET" 2>/dev/null || true
 
 # 清理构建临时目录
 rm -rf "${escapedTmpRoot}"
 
-# 启动新版本
+# 启动新版本（-F 强制新建进程）
 echo "🚀 启动新版本..."
-open "$TARGET"
+open -F "$TARGET"
 `;
     fs.writeFileSync(scriptPath, script, { mode: 0o755 });
 
@@ -1098,8 +1199,12 @@ if [ -d "$TARGET" ]; then
   mv "$TARGET" "/tmp/qq-pet-backup-$TS"
 fi
 
-# 复制新版本到原位置
-cp -R "$NEWAPP" "$TARGET"
+# 确保目标路径不存在（cp -R 行为在目标存在/不存在时不一致，用 ditto 更可靠）
+# ditto 会保留 macOS 扩展属性，但我们后面会清 quarantine
+ditto "$NEWAPP" "$TARGET"
+
+# 清除 Gatekeeper 隔离标记（避免 macOS 拦截或打开旧版本）
+xattr -dr com.apple.quarantine "$TARGET" 2>/dev/null || true
 
 # 清理更新缓存（zip + 解压的 .app）
 rm -rf "$CACHE"
@@ -1108,8 +1213,8 @@ rm -rf "$CACHE"
 find /tmp -maxdepth 1 -name "qq-pet-backup-*" -mtime +1 -exec rm -rf {} \\; 2>/dev/null || true
 find /tmp -maxdepth 1 -name "qq-pet-update-*" -mtime +1 -exec rm -rf {} \\; 2>/dev/null || true
 
-# 启动新版本
-open "$TARGET"
+# 启动新版本（-F 强制新建进程，不复用已有实例）
+open -F "$TARGET"
 `;
   fs.writeFileSync(scriptPath, script, { mode: 0o755 });
 
@@ -1424,7 +1529,7 @@ ipcMain.handle('workbuddy-delegate', async (event, payload = {}) => {
     const raw = fs.readFileSync(configPath, 'utf-8');
     const openclaw = JSON.parse(raw);
 
-    const token = openclaw?.gateway?.auth?.token;
+    const token = installerExtractTokenFromConfig(openclaw);
     // 从配置文件读取 gateway 端口（不硬编码）
     const cfgPort = openclaw?.gateway?.port || openclaw?.gateway?.apiPort || '';
     let aiCfg = {};
@@ -1434,14 +1539,17 @@ ipcMain.handle('workbuddy-delegate', async (event, payload = {}) => {
         aiCfg = JSON.parse(fs.readFileSync(aiConfigPath, 'utf-8') || '{}');
       }
     } catch {}
-    // 优先级：环境变量 > ai-config.json（安装时探测到的） > 配置文件端口 > 空（让调用方知道没有可用接口）
+    const model = process.env.WORKBUDDY_MODEL || aiCfg.model || 'openclaw:main';
+    // 优先级：环境变量 > ai-config.json（安装时探测到的） > 动态探测 > 空
     const baseUrl = process.env.WORKBUDDY_API_URL
       || aiCfg.api_url
-      || (cfgPort ? `http://127.0.0.1:${cfgPort}/v1/chat/completions` : '');
-    const model = process.env.WORKBUDDY_MODEL || aiCfg.model || 'openclaw:main';
+      || (cfgPort ? await installerDetectChatApiUrl(cfgPort, token, model) : '');
 
     if (!token) {
       return { ok: false, error: '未找到 OpenClaw 网关 token' };
+    }
+    if (!baseUrl) {
+      return { ok: false, error: '未检测到可用的 OpenAI 兼容对话接口' };
     }
 
     const userText = payload.userText || '';
@@ -1502,27 +1610,130 @@ async function installerProbePort(port, token = '') {
     const url = `http://127.0.0.1:${port}/v1/models`;
     const headers = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const res = await fetch(url, { method: 'GET', headers, signal: AbortSignal.timeout(1200) });
-    return res.status === 200 || res.status === 401 || res.status === 403;
-  } catch { return false; }
+    const res = await fetch(url, { method: 'GET', headers, signal: AbortSignal.timeout(1500) });
+    const alive = res.status === 200 || res.status === 401 || res.status === 403;
+    if (!alive) return { alive: false, detectedType: null };
+    let detectedType = null;
+    if (res.status === 200) {
+      try {
+        const body = await res.json();
+        const modelIds = (body?.data || []).map(m => String(m?.id || '').toLowerCase()).join(' ');
+        const bodyStr  = JSON.stringify(body).toLowerCase();
+        if (bodyStr.includes('openclaw') || modelIds.includes('openclaw')) detectedType = 'openclaw';
+        else if (bodyStr.includes('qqclaw') || modelIds.includes('qqclaw')) detectedType = 'qqclaw';
+        const serverName = String(body?.server_name || body?.server_type || '').toLowerCase();
+        if (!detectedType && serverName.includes('openclaw')) detectedType = 'openclaw';
+        else if (!detectedType && serverName.includes('qqclaw')) detectedType = 'qqclaw';
+      } catch {}
+    }
+    return { alive: true, detectedType };
+  } catch { return { alive: false, detectedType: null }; }
+}
+
+function installerExtractTokenFromConfig(cfg) {
+  return String(
+    cfg?.token ||
+    cfg?.api_key ||
+    cfg?.apiKey ||
+    cfg?.auth?.token ||
+    cfg?.gateway?.auth?.token ||
+    cfg?.gateway?.http?.auth?.token ||
+    ''
+  ).trim();
+}
+
+function installerReadClawConfigFrom(configPath) {
+  try {
+    if (!fs.existsSync(configPath)) return null;
+    const cfg = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    const token = installerExtractTokenFromConfig(cfg);
+    const cfgPort = String(cfg?.gateway?.port || cfg?.gateway?.apiPort || '').trim();
+    const modelRaw = cfg?.agents?.defaults?.model;
+    const model = String(
+      typeof modelRaw === 'string' ? modelRaw : (modelRaw?.primary || modelRaw?.name || '')
+    ).trim();
+    return { token, port: cfgPort, model, source: configPath };
+  } catch { return null; }
 }
 
 function installerReadLocalClawConfig() {
-  const candidates = [
-    path.join(os.homedir(), '.qqclaw', 'openclaw.json'),
-    path.join(os.homedir(), '.openclaw', 'openclaw.json'),
-  ];
-  for (const cp of candidates) {
-    if (!fs.existsSync(cp)) continue;
-    try {
-      const cfg = JSON.parse(fs.readFileSync(cp, 'utf-8'));
-      const token = String(cfg?.token || cfg?.gateway?.auth?.token || '').trim();
-      const cfgPort = String(cfg?.gateway?.port || cfg?.gateway?.apiPort || '').trim();
-      const model = String(cfg?.agents?.defaults?.model?.primary || '').trim();
-      if (token || cfgPort) return { token, port: cfgPort, model, source: cp };
-    } catch {}
-  }
+  const HOME = os.homedir();
+  const ocCfg = installerReadClawConfigFrom(path.join(HOME, '.openclaw', 'openclaw.json'));
+  const qqCfg = installerReadClawConfigFrom(path.join(HOME, '.qqclaw',  'openclaw.json'));
+  if (ocCfg && (ocCfg.token || ocCfg.port)) return ocCfg;
+  if (qqCfg && (qqCfg.token || qqCfg.port)) return qqCfg;
   return { token: '', port: '', model: '', source: '' };
+}
+
+async function installerProbeChatEndpoint(url, token = '', model = 'openclaw:main') {
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers,
+      signal: AbortSignal.timeout(1800),
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: 'ping' }],
+        temperature: 0,
+        max_tokens: 1,
+        stream: false,
+      }),
+    });
+    return res.status !== 404;
+  } catch { return false; }
+}
+
+async function installerDetectChatApiUrl(port, token = '', model = 'openclaw:main') {
+  const candidates = [
+    `/v1/chat/completions`,
+    `/openai/v1/chat/completions`,
+    `/api/openai/v1/chat/completions`,
+    `/api/v1/chat/completions`,
+    `/chat/completions`,
+  ];
+  for (const pathname of candidates) {
+    const url = `http://127.0.0.1:${port}${pathname}`;
+    if (await installerProbeChatEndpoint(url, token, model)) return url;
+  }
+  return '';
+}
+
+function installerEnsureChatCompletionsEnabled(configPath) {
+  try {
+    if (!configPath || !fs.existsSync(configPath)) return { changed: false, error: '' };
+    const cfg = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    cfg.gateway = cfg.gateway || {};
+    cfg.gateway.http = cfg.gateway.http || {};
+    cfg.gateway.http.endpoints = cfg.gateway.http.endpoints || {};
+    const current = cfg.gateway.http.endpoints.chatCompletions;
+    if (current && typeof current === 'object' && current.enabled === true) {
+      return { changed: false, error: '' };
+    }
+    cfg.gateway.http.endpoints.chatCompletions = {
+      ...(current && typeof current === 'object' ? current : {}),
+      enabled: true,
+    };
+    fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2));
+    return { changed: true, error: '' };
+  } catch (e) {
+    return { changed: false, error: e.message };
+  }
+}
+
+function installerGuessClawType(port, installed, configSource, detectedType) {
+  if (detectedType) return detectedType;
+  if (configSource) {
+    if (configSource.includes('/.openclaw/')) return 'openclaw';
+    if (configSource.includes('/.qqclaw/'))  return 'qqclaw';
+  }
+  if (installed.openclaw && !installed.qqclaw) return 'openclaw';
+  if (installed.qqclaw  && !installed.openclaw) return 'qqclaw';
+  const n = Number(port);
+  if (n === 19789) return 'qqclaw';
+  if (n === 18789) return 'openclaw';
+  return 'openclaw';
 }
 
 function installerGetAgentSrcDir() {
@@ -1559,11 +1770,28 @@ ipcMain.handle('scan-ports', async () => {
 
   let foundPort = null, foundType = null;
   for (const port of scanPorts) {
-    const ok = await installerProbePort(port, localCfg.token);
-    if (ok) {
+    const { alive, detectedType } = await installerProbePort(port, localCfg.token);
+    if (alive) {
       foundPort = port;
-      foundType = [18789, 19789].includes(port) ? 'qqclaw' : 'openclaw';
+      foundType = installerGuessClawType(port, installed, localCfg.source, detectedType);
       break;
+    }
+  }
+
+  const model = localCfg.model || (foundType === 'qqclaw' ? 'qqclaw:main' : 'openclaw:main');
+  let apiUrl = foundPort ? await installerDetectChatApiUrl(foundPort, localCfg.token, model) : '';
+  let needsRestart = false;
+  let repairNote = '';
+
+  if (foundPort && foundType === 'openclaw' && !apiUrl) {
+    const repaired = installerEnsureChatCompletionsEnabled(localCfg.source);
+    if (repaired.changed) {
+      needsRestart = true;
+      repairNote = '已自动开启 OpenClaw 的 HTTP chatCompletions 端点，请重启 OpenClaw 后重新检测';
+    } else if (repaired.error) {
+      repairNote = `未检测到可用对话接口，且自动修复失败：${repaired.error}`;
+    } else {
+      repairNote = '未检测到可用的 OpenAI 兼容对话接口，请检查 OpenClaw 网关配置';
     }
   }
 
@@ -1572,8 +1800,11 @@ ipcMain.handle('scan-ports', async () => {
     port:      foundPort,
     type:      foundType,
     token:     localCfg.token,
-    model:     localCfg.model || 'openclaw:main',
-    apiUrl:    foundPort ? `http://127.0.0.1:${foundPort}/v1/chat/completions` : '',
+    model,
+    apiUrl,
+    chatReady: !!apiUrl,
+    needsRestart,
+    repairNote,
     installed,
     lsofPorts,
   };
@@ -1643,6 +1874,7 @@ ipcMain.handle('open-url', async (_, url) => {
 
 // launch-pet：安装向导完成后启动宠物（关闭向导窗口 + 创建宠物窗口）
 ipcMain.on('launch-pet', () => {
+  installerCompleted = true;  // 标记：用户主动完成配置
   if (aiSetupWindow && !aiSetupWindow.isDestroyed()) aiSetupWindow.close();
   // 首次安装流程：installer 完成后才启动宠物
   launchPetApp();
@@ -2560,7 +2792,57 @@ ipcMain.handle('save-asr-config', (event, data) => {
   }
 });
 
-// 检测 ASR 可用性
+// 检测系统麦克风权限（macOS 沙盒用，ffmpeg 需要系统授权才能采集）
+ipcMain.handle('check-mic-permission', async () => {
+  try {
+    if (process.platform !== 'darwin') {
+      return { status: 'granted', platform: process.platform };
+    }
+    const status = systemPreferences.getMediaAccessStatus('microphone');
+    console.log(`🎤 系统麦克风权限状态: ${status}`);
+    return { status }; // 'not-determined' | 'denied' | 'restricted' | 'granted'
+  } catch (e) {
+    console.warn('🎤 检测麦克风权限失败:', e.message);
+    return { status: 'unknown', error: e.message };
+  }
+});
+
+// 请求系统麦克风权限（首次会弹出系统对话框；已拒绝的需跳转系统偏好设置）
+ipcMain.handle('request-mic-permission', async () => {
+  try {
+    if (process.platform !== 'darwin') {
+      return { granted: true };
+    }
+    const current = systemPreferences.getMediaAccessStatus('microphone');
+    if (current === 'granted') return { granted: true, status: 'granted' };
+    if (current === 'denied' || current === 'restricted') {
+      // 已拒绝，只能引导用户去系统偏好设置
+      console.warn('🎤 麦克风权限被拒绝，引导用户去系统偏好设置');
+      return { granted: false, status: current, needSystemPrefs: true };
+    }
+    // not-determined → 弹出请求
+    const granted = await systemPreferences.askForMediaAccess('microphone');
+    console.log(`🎤 请求麦克风权限结果: ${granted ? '已授权' : '已拒绝'}`);
+    return { granted, status: granted ? 'granted' : 'denied' };
+  } catch (e) {
+    console.warn('🎤 请求麦克风权限失败:', e.message);
+    return { granted: false, error: e.message };
+  }
+});
+
+// 打开系统偏好设置 → 隐私 → 麦克风（引导用户手动开启）
+ipcMain.handle('open-mic-system-prefs', async () => {
+  try {
+    await shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone');
+    return { ok: true };
+  } catch (e) {
+    // 兜底：打开系统偏好设置首页
+    try { await shell.openExternal('x-apple.systempreferences:'); } catch {}
+    return { ok: false, error: e.message };
+  }
+});
+
+// 检测 ASR 可用性（同时检查麦克风权限）
 ipcMain.handle('asr-check', async () => {
   const { cfg, configPath } = loadAsrConfig();
   const missing = validateAsrConfig(cfg);
@@ -2572,7 +2854,21 @@ ipcMain.handle('asr-check', async () => {
       configPath,
     };
   }
-  return { available: true, engine: 'tencent-cloud-asr', configPath };
+  // 额外检查系统麦克风权限
+  let micStatus = 'unknown';
+  try {
+    if (process.platform === 'darwin') {
+      micStatus = systemPreferences.getMediaAccessStatus('microphone');
+    } else {
+      micStatus = 'granted';
+    }
+  } catch {}
+  return {
+    available: true,
+    engine: 'tencent-cloud-asr',
+    configPath,
+    micStatus,               // 透传给渲染进程做权限提示
+  };
 });
 
 // 开始流式识别会话：建立到腾讯云的 WebSocket 连接 + 启动 ffmpeg 麦克风采集
@@ -2698,6 +2994,25 @@ ipcMain.handle('asr-start', async () => {
     }
 
     // 第二步：启动 ffmpeg 采集麦克风，输出 16kHz 16bit mono PCM 到 stdout
+    // 先检查系统麦克风权限
+    if (process.platform === 'darwin') {
+      const micStatus = systemPreferences.getMediaAccessStatus('microphone');
+      console.log(`🎤 启动 ffmpeg 前检查麦克风权限: ${micStatus}`);
+      if (micStatus !== 'granted') {
+        if (micStatus === 'not-determined') {
+          const granted = await systemPreferences.askForMediaAccess('microphone');
+          if (!granted) {
+            console.warn('🎤 用户拒绝了麦克风权限');
+            try { if (asrWs) asrWs.close(); } catch {} asrWs = null;
+            return { error: 'mic-denied', message: '需要麦克风权限才能使用语音功能。请在「系统设置 → 隐私与安全性 → 麦克风」中允许 QQ宠物 访问。' };
+          }
+        } else {
+          console.warn(`🎤 麦克风权限: ${micStatus}，无法启动 ffmpeg`);
+          try { if (asrWs) asrWs.close(); } catch {} asrWs = null;
+          return { error: 'mic-denied', message: `麦克风权限：${micStatus}。请前往「系统设置 → 隐私与安全性 → 麦克风」开启。` };
+        }
+      }
+    }
     try {
       const ffmpegPath = '/opt/homebrew/bin/ffmpeg';
       micProcess = spawn(ffmpegPath, [
@@ -2754,7 +3069,16 @@ ipcMain.handle('asr-start', async () => {
 
       micProcess.stderr.on('data', (data) => {
         const msg = data.toString().trim();
-        if (msg) console.log('🎤 ffmpeg info:', msg);
+        if (msg) {
+          console.log('🎤 ffmpeg info:', msg);
+          // 检测权限拒绝
+          if (/permission denied|not authorized|access denied|couldn't use.*avfoundation/i.test(msg)) {
+            console.error('🎤 ⚠️ ffmpeg 麦克风权限被拒绝！');
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('asr-mic-permission-denied');
+            }
+          }
+        }
       });
 
       micProcess.on('error', (err) => {
@@ -3438,6 +3762,119 @@ function copyDirSync(src, dst) {
   }
 }
 
+// ═══════════════════════════════════════════
+// 📋 日志管理 IPC
+// ═══════════════════════════════════════════
+
+// 获取日志文件列表（最近 N 个）
+ipcMain.handle('get-log-files', () => {
+  try {
+    if (!fs.existsSync(LOG_DIR)) return { ok: true, files: [] };
+    const files = fs.readdirSync(LOG_DIR)
+      .filter(f => f.startsWith('qq-pet-') && f.endsWith('.log'))
+      .sort()
+      .reverse()
+      .slice(0, MAX_LOG_FILES)
+      .map(f => {
+        const fp = path.join(LOG_DIR, f);
+        let size = 0;
+        try { size = fs.statSync(fp).size; } catch {}
+        return { name: f, path: fp, size };
+      });
+    return { ok: true, files, logDir: LOG_DIR };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// 读取指定日志文件的最后 N 行（默认 500 行）
+ipcMain.handle('read-log-tail', (event, { filePath: fp, lines = 500 } = {}) => {
+  try {
+    const target = fp ? String(fp) : getLogFilePath();
+    if (!target.startsWith(LOG_DIR)) return { ok: false, error: '路径不允许' };
+    if (!fs.existsSync(target)) return { ok: true, content: '' };
+    const content = fs.readFileSync(target, 'utf-8');
+    const allLines = content.split('\n');
+    const tail = allLines.slice(-lines).join('\n');
+    return { ok: true, content: tail, totalLines: allLines.length };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// 打开日志目录（Finder）
+ipcMain.handle('open-log-dir', async () => {
+  try {
+    ensureLogDir();
+    await shell.openPath(LOG_DIR);
+    return { ok: true, logDir: LOG_DIR };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// 收集诊断包：把日志 + ai-config(脱敏) + system-settings + asr状态 打包成一段文字
+ipcMain.handle('collect-diagnostics', () => {
+  try {
+    const diag = [];
+    diag.push('═══════════ QQ宠物诊断报告 ═══════════');
+    diag.push(`时间: ${new Date().toISOString()}`);
+    diag.push(`平台: ${process.platform} ${os.release()}`);
+    diag.push(`App版本: ${getCurrentVersion()}`);
+    diag.push('');
+
+    // AI配置状态（脱敏）
+    try {
+      const cfgPath = path.join(os.homedir(), '.qq-pet', 'config', 'ai-config.json');
+      if (fs.existsSync(cfgPath)) {
+        const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'));
+        diag.push('─── AI配置 ───');
+        diag.push(`provider: ${cfg.provider}`);
+        diag.push(`api_url: ${cfg.api_url}`);
+        diag.push(`model: ${cfg.model}`);
+        diag.push(`api_key: ${cfg.api_key ? '已设置(已脱敏)' : '未设置'}`);
+        diag.push(`agent_dir: ${cfg.agent_dir}`);
+        diag.push('');
+      }
+    } catch {}
+
+    // ASR配置状态（脱敏）
+    try {
+      const { cfg: asrCfg } = loadAsrConfig();
+      diag.push('─── ASR配置 ───');
+      diag.push(`appId: ${asrCfg.appId ? '已设置' : '未设置'}`);
+      diag.push(`secretId: ${asrCfg.secretId ? '已设置' : '未设置'}`);
+      diag.push(`secretKey: ${asrCfg.secretKey ? '已设置(已脱敏)' : '未设置'}`);
+      diag.push(`engineModel: ${asrCfg.engineModelType}`);
+      diag.push('');
+    } catch {}
+
+    // 系统麦克风权限
+    try {
+      if (process.platform === 'darwin') {
+        const micStatus = systemPreferences.getMediaAccessStatus('microphone');
+        diag.push(`麦克风权限: ${micStatus}`);
+        diag.push('');
+      }
+    } catch {}
+
+    // 最近50行日志
+    try {
+      const logPath = getLogFilePath();
+      if (fs.existsSync(logPath)) {
+        const lines = fs.readFileSync(logPath, 'utf-8').split('\n').slice(-50);
+        diag.push('─── 最近日志(最后50行) ───');
+        diag.push(lines.join('\n'));
+      }
+    } catch {}
+
+    diag.push('═══════════════════════════════════════');
+    return { ok: true, report: diag.join('\n') };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
 /**
  * 判断是否已完成过配置（有 ai-config.json 就认为走过引导）
  */
@@ -3467,6 +3904,7 @@ function ensureUpdateConfig() {
  * 启动安装向导（作为子窗口，防止重入）
  */
 let aiSetupLaunched = false;
+let installerCompleted = false;  // 用户完成配置并点了「启动q宠」才为 true
 function launchInstallerIfNeeded() {
   if (aiSetupLaunched) return;
   aiSetupLaunched = true;
@@ -3507,8 +3945,13 @@ function launchInstallerIfNeeded() {
   aiSetupWindow.loadFile(installerPath);
   aiSetupWindow.on('closed', () => {
     aiSetupWindow = null;
-    // 兜底：用户直接关闭 installer 窗口（没点启动按钮），也要启动宠物
-    launchPetApp();
+    if (installerCompleted) {
+      // 用户点了「启动q宠」，launch-pet IPC 已经触发了 launchPetApp()，这里无需再做
+    } else {
+      // 用户直接关窗口（取消配置）→ 退出 App，不启动宠物
+      console.log('🐧 安装向导被取消，退出 App');
+      app.quit();
+    }
   });
   console.log(`🐧 首次启动，安装向导已打开: ${installerPath}`);
 }

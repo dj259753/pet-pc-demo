@@ -607,7 +607,11 @@ function updateFooter() {
       elNext.disabled=false;
     }
   }
-  if (curPanel==='found')    { elNext.disabled=false; elNext.textContent='安装 Skills 并完成配置'; }
+  if (curPanel==='found')    {
+    const chatReady = !!(scanData && scanData.chatReady);
+    elNext.disabled=false;
+    elNext.textContent = chatReady ? '安装 Skills 并完成配置' : '先以离线模式继续';
+  }
   if (curPanel==='offline')  { elNext.style.display='none'; elRescan.style.display='inline-block'; elSkip2.style.display='inline-block'; }
   if (curPanel==='installing'){ elNext.disabled=true; elNext.textContent='安装中...'; }
   if (curPanel==='done')     { elNext.style.display='none'; elLaunch.style.display='inline-block'; }
@@ -679,7 +683,13 @@ async function runScan(forcedData = null) {
 
   if (scanData.found) {
     const n = scanData.type==='qqclaw'?'QQClaw':'OpenClaw';
-    hint.textContent=`已发现 ${n} 活跃端口 :${scanData.port}，点击「继续」完成配置`;
+    if (scanData.chatReady) {
+      hint.textContent=`已发现 ${n} 活跃端口 :${scanData.port}，点击「继续」完成配置`;
+    } else if (scanData.needsRestart) {
+      hint.textContent=`已发现 ${n}，但对话接口尚未生效。已自动修复配置，请重启 ${n} 后重新检测`;
+    } else {
+      hint.textContent=`已发现 ${n}，但未检测到可用的对话接口，可先离线安装或检查网关配置`;
+    }
     setQQClawRecVisibility(false);
   } else if (scanData.installed&&(scanData.installed.qqclaw||scanData.installed.openclaw)) {
     const n = scanData.installed.qqclaw?'QQClaw':'OpenClaw';
@@ -720,8 +730,16 @@ function fillFound() {
   const isQQ=scanData.type==='qqclaw';
   document.getElementById('found-emoji').textContent=isQQ?'🐾':'🤖';
   document.getElementById('found-name').textContent=(isQQ?'QQClaw':'OpenClaw')+' 已运行';
-  document.getElementById('found-desc').textContent=`检测到端口 :${scanData.port} 活跃，已自动读取接口地址`;
-  document.getElementById('found-url').textContent=scanData.apiUrl;
+  if (scanData.chatReady) {
+    document.getElementById('found-desc').textContent=`检测到端口 :${scanData.port} 活跃，已自动读取接口地址`;
+    document.getElementById('found-url').textContent=scanData.apiUrl;
+  } else if (scanData.needsRestart) {
+    document.getElementById('found-desc').textContent='检测到网关正在运行，但当前实例未开放兼容对话接口。已自动修复配置，请重启后重新检测。';
+    document.getElementById('found-url').textContent=scanData.repairNote||'未检测到可用 chat endpoint';
+  } else {
+    document.getElementById('found-desc').textContent='检测到网关正在运行，但未发现可用的兼容对话接口，可先离线安装。';
+    document.getElementById('found-url').textContent=scanData.repairNote||'未检测到可用 chat endpoint';
+  }
   document.getElementById('found-agent-dir').textContent=isQQ?'~/.qqclaw/agents/qq-pet/':'~/.openclaw/agents/qq-pet/';
 }
 
@@ -749,7 +767,16 @@ function goNext() {
     }
     routeAfterScan(); return;
   }
-  if (curPanel==='found') { runInstall({apiUrl:scanData.apiUrl,token:scanData.token,model:scanData.model,clawType:scanData.type,configured:true}); return; }
+  if (curPanel==='found') {
+    runInstall({
+      apiUrl:scanData.apiUrl,
+      token:scanData.token,
+      model:scanData.model,
+      clawType:scanData.type,
+      configured:!!scanData.chatReady
+    });
+    return;
+  }
 }
 function goBack()        { /* 扫描页无需返回 */ }
 async function rescan()  {
