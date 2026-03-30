@@ -126,8 +126,8 @@ const TaskbarUI = (() => {
                   window.electronAPI.quitApp();
                 });
 
-                // 安全兜底：最多等30秒，动画卡住也要退出
-                setTimeout(() => { window.electronAPI.quitApp(); }, 30000);
+                // 安全兜底：最多等 5 秒，退出动画卡住也要退出（避免误以为程序无法关闭）
+                setTimeout(() => { window.electronAPI.quitApp(); }, 10000);
               } else {
                 window.electronAPI.quitApp();
               }
