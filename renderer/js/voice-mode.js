@@ -1,25 +1,33 @@
 /* ═══════════════════════════════════════════
    语音模式 - 流式 ASR (腾讯云实时语音识别)
-   边说边显示文字，实时流式识别
-   操作方式：
-     1. 点击按钮切换（开始/结束）
-     2. Cmd+K 按一下进入聆听 / 再按一下结束
+   麦克风采集：Web Audio API (getUserMedia)，零外部依赖
    ═══════════════════════════════════════════ */
 
 const VoiceMode = (() => {
   'use strict';
 
   // ─── 状态 ───
-  let isRecording = false;       // 用户期望的持续聆听状态
-  let isSessionRunning = false;  // 当前 ASR 会话是否正在运行
-  let isBusy = false;          // 防止快速重复点击
+  let isRecording = false;
+  let isSessionRunning = false;
+  let isBusy = false;
   let isSupported = false;
   let asrAvailable = false;
-  let micPermStatus = 'unknown'; // 系统麦克风权限状态
+  let micPermStatus = 'unknown';
 
   // ─── 流式识别缓存 ───
-  let currentText = '';         // 当前流式识别的文字
-  let finalText = '';           // 最终确认的文字
+  let currentText = '';
+  let finalText = '';
+
+  // ─── Web Audio 相关 ───
+  let audioCtx = null;
+  let micStream = null;
+  let micSource = null;
+  let scriptProcessor = null;
+  let pcmBuffer = [];           // 未满帧的剩余字节
+  const FRAME_SIZE = 1280;      // 腾讯云 ASR 推荐 40ms 帧 = 16kHz × 2B × 0.04s = 1280B
+  let micChunks = 0;
+  let micBytesSent = 0;
+  let lastVolumeEmitAt = 0;
 
   // ─── 回调 ───
   let onResultCallback = null;
@@ -28,25 +36,25 @@ const VoiceMode = (() => {
   let onErrorCallback = null;
   let onStreamingCallback = null;
   let onModeChangeCallback = null;
-  let onSegmentCallback = null;   // realtime 模式：每次 VAD 分段完成后触发（用于清空字幕）
+  let onSegmentCallback = null;
 
   // ─── 模式 ───
   const MODE_SINGLE = 'single';
   const MODE_REALTIME = 'realtime';
   let mode = MODE_REALTIME;
 
-  // ─── 连续监听 + 音量VAD 参数 ───
+  // ─── VAD 参数 ───
   const VAD_FRAME_MS = 40;
-  let VAD_START_FRAMES = 8;        // 约 320ms，降低背景声误触发
-  let VAD_END_FRAMES = 25;         // 约 1000ms，1秒静音即判定说话结束
-  let VAD_MARGIN_DB = 14;          // 相对噪声底 +14dB 才判定为语音
-  let VAD_MIN_DBFS = -38;          // 提高绝对门限，过滤远处低音量人声
-  const VAD_MIN_SPEECH_MS = 500;   // 最短有效语音时长
+  let VAD_START_FRAMES = 8;
+  let VAD_END_FRAMES = 25;
+  let VAD_MARGIN_DB = 14;
+  let VAD_MIN_DBFS = -38;
+  const VAD_MIN_SPEECH_MS = 500;
   const AUTO_RESTART_DELAY_MS = 120;
   const NOISE_PROFILES = {
-    1: { name: '灵敏', marginDb: 10, minDbfs: -45, startFrames: 7, endFrames: 25 },
-    2: { name: '均衡', marginDb: 12, minDbfs: -42, startFrames: 8, endFrames: 25 },
-    3: { name: '抗噪', marginDb: 14, minDbfs: -38, startFrames: 8, endFrames: 25 },
+    1: { name: '灵敏',  marginDb: 10, minDbfs: -45, startFrames: 7, endFrames: 25 },
+    2: { name: '均衡',  marginDb: 12, minDbfs: -42, startFrames: 8, endFrames: 25 },
+    3: { name: '抗噪',  marginDb: 14, minDbfs: -38, startFrames: 8, endFrames: 25 },
     4: { name: '强抗噪', marginDb: 16, minDbfs: -35, startFrames: 9, endFrames: 25 },
   };
   let noiseLevel = 3;
@@ -58,16 +66,35 @@ const VoiceMode = (() => {
   let segmentSpeechStartAt = 0;
   let isAutoSegmenting = false;
 
+  // ─── 工具：Float32 → Int16 PCM ───
+  function float32ToInt16(float32Array) {
+    const int16 = new Int16Array(float32Array.length);
+    for (let i = 0; i < float32Array.length; i++) {
+      const s = Math.max(-1, Math.min(1, float32Array[i]));
+      int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+    return int16;
+  }
+
+  // ─── 工具：计算 PCM 帧的 dBFS（用于 VAD + 音量条）───
+  function calcFrameDb(int16Array) {
+    if (!int16Array || int16Array.length === 0) return -100;
+    let sumSq = 0;
+    for (let i = 0; i < int16Array.length; i++) sumSq += int16Array[i] * int16Array[i];
+    const rms = Math.sqrt(sumSq / int16Array.length);
+    if (rms <= 0) return -100;
+    const db = 20 * Math.log10(rms / 32768);
+    return Number.isFinite(db) ? db : -100;
+  }
+
   // ─── 初始化 ───
   async function init() {
-    // 加载模式配置
     try {
       const stored = localStorage.getItem('voice_mode_type');
       if (stored === MODE_SINGLE || stored === MODE_REALTIME) mode = stored;
     } catch {}
     loadNoiseProfile();
 
-    // 音频采集已移到主进程（ffmpeg），渲染进程只需 electronAPI 可用
     if (!window.electronAPI || !window.electronAPI.asrStart) {
       console.warn('[Voice] electronAPI.asrStart 不可用');
       isSupported = false;
@@ -76,64 +103,42 @@ const VoiceMode = (() => {
 
     isSupported = true;
 
-    // 检测腾讯云 ASR 可用性
-    if (window.electronAPI && window.electronAPI.asrCheck) {
+    // 检测 ASR 可用性
+    if (window.electronAPI.asrCheck) {
       try {
         const result = await window.electronAPI.asrCheck();
         asrAvailable = result.available;
         if (result.micStatus) micPermStatus = result.micStatus;
-        console.log(`🎤 ASR (${result.engine}): ${asrAvailable ? '可用 ✅' : '不可用 ❌'}, 麦克风: ${micPermStatus}`);
+        console.log(`🎤 ASR (${result.engine}): ${asrAvailable ? '可用 ✅' : '不可用 ❌'}`);
       } catch (e) {
         console.warn('🎤 ASR 检测失败:', e);
         asrAvailable = false;
       }
     }
 
-    // 单独检测麦克风权限（如果 asr-check 没返回 micStatus）
-    if (micPermStatus === 'unknown' && window.electronAPI?.checkMicPermission) {
-      try {
-        const mp = await window.electronAPI.checkMicPermission();
-        micPermStatus = mp.status || 'unknown';
-      } catch {}
-    }
-
-    // 监听主进程推送的流式识别结果（腾讯云 ASR 的结果从 WebSocket 回调推送）
-    if (window.electronAPI && window.electronAPI.onAsrStreamingResult) {
+    // 监听主进程推送的流式识别结果
+    if (window.electronAPI.onAsrStreamingResult) {
       window.electronAPI.onAsrStreamingResult((data) => {
-        // 注意：这里不检查 isRecording，因为分段停止期间仍需接收最终结果
         const text = data.text || '';
         console.log(`[Voice] 流式结果: "${text}" isFinal=${data.isFinal}`);
         if (text && text !== currentText) {
           currentText = text;
           if (isSessionRunning && onStreamingCallback) onStreamingCallback(currentText);
         }
-        // 如果是一句话结束，更新 finalText
         if (data.isFinal && data.text) {
           finalText = data.text;
         }
       });
     }
 
-    if (window.electronAPI && window.electronAPI.onAsrVolume) {
-      window.electronAPI.onAsrVolume(({ db }) => {
-        if (mode !== MODE_REALTIME) return;
-        if (!isRecording || !isSessionRunning) return;
-        if (typeof db !== 'number' || !Number.isFinite(db)) return;
-        processVad(db);
-      });
-    }
-
-    registerKeyBindings();
-
-    // 监听 ASR 配置更新（用户在设置面板保存后触发），自动刷新可用性
-    if (window.electronAPI && window.electronAPI.onAsrConfigUpdated) {
+    // 监听 ASR 配置更新
+    if (window.electronAPI.onAsrConfigUpdated) {
       window.electronAPI.onAsrConfigUpdated(async () => {
-        console.log('🎤 收到 asr-config-updated，重新检测 ASR 可用性...');
+        console.log('🎤 收到 asr-config-updated，重新检测...');
         if (window.electronAPI.asrCheck) {
           try {
             const result = await window.electronAPI.asrCheck();
             asrAvailable = result.available;
-            if (result.micStatus) micPermStatus = result.micStatus;
             console.log(`🎤 ASR 可用性已刷新: ${asrAvailable ? '可用 ✅' : '不可用 ❌'}`);
           } catch (e) {
             console.warn('🎤 ASR 重新检测失败:', e);
@@ -142,24 +147,11 @@ const VoiceMode = (() => {
       });
     }
 
-    // 监听 ffmpeg 权限拒绝事件（来自主进程 stderr 检测）
-    if (window.electronAPI && window.electronAPI.onAsrMicPermissionDenied) {
-      window.electronAPI.onAsrMicPermissionDenied(() => {
-        console.warn('🎤 ffmpeg 报告麦克风权限被拒绝');
-        micPermStatus = 'denied';
-        if (isRecording) {
-          isRecording = false;
-          isSessionRunning = false;
-          if (onStopCallback) onStopCallback({ reason: 'mic-denied' });
-          if (onErrorCallback) onErrorCallback('mic-denied');
-        }
-      });
-    }
-
-    console.log('🎤 语音模式初始化完成 (腾讯云 ASR 流式识别)');
+    registerKeyBindings();
+    console.log('🎤 语音模式初始化完成 (Web Audio API + 腾讯云 ASR)');
   }
 
-  // ─── Cmd+K 按一下切换聆听模式 ───
+  // ─── 快捷键 ───
   function registerKeyBindings() {
     document.addEventListener('keydown', (e) => {
       let targetKey = 'k';
@@ -170,93 +162,41 @@ const VoiceMode = (() => {
       }
       if ((e.metaKey || e.ctrlKey) && String(e.key || '').toLowerCase() === targetKey) {
         e.preventDefault();
-        // 按一下切换：录音中→停止，空闲→开始
         toggle();
       }
     });
   }
 
-  // ─── 切换录音（异步，返回 Promise<boolean>） ───
+  // ─── 切换录音 ───
   async function toggle() {
-    if (!isSupported) {
-      if (onErrorCallback) onErrorCallback('not-supported');
-      return false;
-    }
-    // 忙碌时优先处理“停止”请求，避免结束要多次点击
+    if (!isSupported) { if (onErrorCallback) onErrorCallback('not-supported'); return false; }
     if (isBusy) {
-      if (isRecording || isSessionRunning) {
-        await stopRecording();
-        return false;
-      }
+      if (isRecording || isSessionRunning) { await stopRecording(); return false; }
       return isRecording;
     }
-    if (isRecording) {
-      await stopRecording();
-      return false;
-    } else {
-      const started = await startRecording();
-      return started;
-    }
+    if (isRecording) { await stopRecording(); return false; }
+    return await startRecording();
   }
 
-  // ─── 开始持续录音 + 流式识别 ───
+  // ─── 开始录音 ───
   async function startRecording() {
-    if (!isSupported) {
-      if (onErrorCallback) onErrorCallback('not-supported');
-      return false;
-    }
-    if (isRecording || isBusy) return isRecording;
-
-    if (!asrAvailable) {
-      if (onErrorCallback) onErrorCallback('asr-unavailable');
-      return false;
-    }
-
-    // ── 先检查系统麦克风权限（macOS 沙盒需要） ──
-    if (window.electronAPI && window.electronAPI.checkMicPermission) {
-      try {
-        const permResult = await window.electronAPI.checkMicPermission();
-        const permStatus = permResult.status;
-        console.log(`[Voice] 系统麦克风权限: ${permStatus}`);
-
-        if (permStatus === 'denied' || permStatus === 'restricted') {
-          // 已拒绝 → 给用户提示，引导去系统偏好设置
-          if (onErrorCallback) onErrorCallback('mic-denied');
-          return false;
-        }
-
-        if (permStatus === 'not-determined') {
-          // 未决定 → 主动请求
-          const reqResult = await window.electronAPI.requestMicPermission();
-          if (!reqResult.granted) {
-            if (onErrorCallback) onErrorCallback('mic-denied');
-            return false;
-          }
-          console.log('[Voice] ✅ 麦克风权限已获取');
-        }
-        // granted → 继续
-      } catch (e) {
-        console.warn('[Voice] 权限检测异常，继续尝试:', e);
-      }
-    }
+    if (!isSupported || isRecording || isBusy) return isRecording;
+    if (!asrAvailable) { if (onErrorCallback) onErrorCallback('asr-unavailable'); return false; }
 
     try {
       isBusy = true;
       isRecording = true;
       resetVadState();
       await startAsrSession();
-      isRecording = true;
       isBusy = false;
-
       if (onStartCallback) onStartCallback();
-      console.log('[Voice] ✅ 持续聆听已开启（VAD 自动分段）');
+      console.log('[Voice] ✅ 持续聆听已开启（Web Audio VAD 自动分段）');
       return true;
-
     } catch (e) {
       console.error('[Voice] ❌ 启动录音失败:', e);
       isBusy = false;
       isRecording = false;
-
+      stopMic();
       if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
         if (onErrorCallback) onErrorCallback('not-allowed');
       } else {
@@ -266,46 +206,43 @@ const VoiceMode = (() => {
     }
   }
 
-  // ─── 手动停止持续录音 ───
+  // ─── 停止录音 ───
   async function stopRecording() {
     if (!isRecording && !isSessionRunning) return;
     isRecording = false;
     isBusy = true;
-
-    // 立即通知 UI 状态变更（不等 ASR session 结束），让按钮即时响应
     if (onStopCallback) onStopCallback({ reason: 'manual-stop' });
-
     try {
       const fullText = await stopAsrSessionAndCollectText();
       if (fullText && onResultCallback) onResultCallback(fullText);
-      isBusy = false;
     } catch (e) {
       console.error('[Voice] stopRecording error:', e);
-      isBusy = false;
       if (onErrorCallback) onErrorCallback('transcription-error');
     }
+    isBusy = false;
   }
 
+  // ─── 启动 ASR 会话（建立 WS + 开麦） ───
   async function startAsrSession() {
     currentText = '';
     finalText = '';
-    console.log('[Voice] 正在启动 ASR + ffmpeg...');
-    let startResult;
-    try {
-      startResult = await window.electronAPI.asrStart();
-    } catch (asrErr) {
-      throw new Error(asrErr.message || '语音识别启动失败');
-    }
+    console.log('[Voice] 正在连接 ASR WebSocket...');
+
+    const startResult = await window.electronAPI.asrStart();
     if (!startResult || startResult.error) {
       throw new Error((startResult && startResult.error) || '语音识别启动失败');
     }
+
+    // WebSocket 建好后，才开麦克风
+    await startMic();
     isSessionRunning = true;
   }
 
+  // ─── 停止 ASR 会话 ───
   async function stopAsrSessionAndCollectText() {
     if (!isSessionRunning) return '';
     isSessionRunning = false;
-    console.log('[Voice] 正在停止当前语音分段...');
+    stopMic();
     const finalResult = await window.electronAPI.asrStop();
     const stopText = (finalResult && finalResult.text) || '';
     let fullText;
@@ -319,6 +256,99 @@ const VoiceMode = (() => {
     return fullText;
   }
 
+  // ─── 开麦：Web Audio API ───
+  async function startMic() {
+    stopMic(); // 先确保清理旧的
+
+    // getUserMedia 会触发系统麦克风权限弹框
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        sampleRate: 16000,
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+      video: false,
+    });
+
+    // AudioContext 统一用 16kHz（即使系统硬件不支持，浏览器会自动重采样）
+    audioCtx = new AudioContext({ sampleRate: 16000 });
+    micSource = audioCtx.createMediaStreamSource(micStream);
+
+    // ScriptProcessor 每次给 4096 个 float32 样本（约 256ms）
+    // 对于 16kHz：4096 samples × 2B/sample = 8192B，内部拆成 6 帧 (1280B)
+    scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1);
+
+    scriptProcessor.onaudioprocess = (e) => {
+      if (!isSessionRunning) return;
+
+      const float32 = e.inputBuffer.getChannelData(0);
+      const int16 = float32ToInt16(float32);
+
+      // 音量 → VAD（realtime 模式下触发自动分段）
+      const now = Date.now();
+      if (now - lastVolumeEmitAt >= 80) {
+        lastVolumeEmitAt = now;
+        const db = calcFrameDb(int16);
+        if (mode === MODE_REALTIME && isRecording) {
+          processVad(db);
+        }
+        // 推音量给渲染进程自己（已去掉 onAsrVolume 的主进程路径，直接本地用）
+        if (onVolumeCallback) onVolumeCallback(db);
+      }
+
+      // 把 int16 追加到 pcmBuffer，按 FRAME_SIZE 切帧发给主进程
+      const bytes = Buffer.from(int16.buffer);
+      pcmBuffer.push(bytes);
+
+      let combined = Buffer.concat(pcmBuffer);
+      pcmBuffer = [];
+
+      while (combined.length >= FRAME_SIZE) {
+        const frame = combined.slice(0, FRAME_SIZE);
+        combined = combined.slice(FRAME_SIZE);
+        micChunks++;
+        micBytesSent += frame.length;
+
+        if (window.electronAPI && window.electronAPI.asrFeed) {
+          window.electronAPI.asrFeed(frame.buffer);
+        }
+      }
+
+      // 剩余不满帧的字节留到下次
+      if (combined.length > 0) pcmBuffer.push(combined);
+
+      if (micChunks > 0 && micChunks % 50 === 0) {
+        console.log(`🎤 WebAudio→ASR: ${micChunks} frames, ${micBytesSent}B sent`);
+      }
+    };
+
+    micSource.connect(scriptProcessor);
+    // 不连 destination，避免扬声器回放自己的声音
+    scriptProcessor.connect(audioCtx.destination);
+
+    console.log('🎤 Web Audio 麦克风采集已启动 (sampleRate:', audioCtx.sampleRate, ')');
+    micPermStatus = 'granted';
+  }
+
+  // ─── 停麦 ───
+  function stopMic() {
+    try { if (scriptProcessor) { scriptProcessor.disconnect(); scriptProcessor.onaudioprocess = null; } } catch {}
+    try { if (micSource) micSource.disconnect(); } catch {}
+    try { if (micStream) micStream.getTracks().forEach(t => t.stop()); } catch {}
+    try { if (audioCtx && audioCtx.state !== 'closed') audioCtx.close(); } catch {}
+    scriptProcessor = null;
+    micSource = null;
+    micStream = null;
+    audioCtx = null;
+    pcmBuffer = [];
+    micChunks = 0;
+    micBytesSent = 0;
+    console.log('🎤 Web Audio 麦克风采集已停止');
+  }
+
+  // ─── VAD ───
   function resetVadState() {
     noiseFloorDb = -62;
     speechActive = false;
@@ -330,10 +360,9 @@ const VoiceMode = (() => {
   }
 
   function applyNoiseProfile(level) {
-    const lv = Number(level);
-    const profile = NOISE_PROFILES[lv];
+    const profile = NOISE_PROFILES[Number(level)];
     if (!profile) return false;
-    noiseLevel = lv;
+    noiseLevel = Number(level);
     VAD_MARGIN_DB = profile.marginDb;
     VAD_MIN_DBFS = profile.minDbfs;
     VAD_START_FRAMES = profile.startFrames;
@@ -345,9 +374,7 @@ const VoiceMode = (() => {
     try {
       const stored = Number(localStorage.getItem('voice_noise_level') || '3');
       if (!applyNoiseProfile(stored)) applyNoiseProfile(3);
-    } catch {
-      applyNoiseProfile(3);
-    }
+    } catch { applyNoiseProfile(3); }
   }
 
   function setNoiseLevel(level) {
@@ -358,7 +385,6 @@ const VoiceMode = (() => {
   }
 
   function processVad(db) {
-    // 静音状态下慢速更新噪声底
     if (!speechActive && db < 0) {
       noiseFloorDb = noiseFloorDb * 0.97 + db * 0.03;
     }
@@ -380,7 +406,6 @@ const VoiceMode = (() => {
       return;
     }
 
-    // speechActive 时判断结束
     if (speakingNow) {
       silenceFrames = 0;
     } else {
@@ -397,30 +422,23 @@ const VoiceMode = (() => {
     if (!isRecording || !isSessionRunning || isAutoSegmenting) return;
     isAutoSegmenting = true;
 
-    // 先快照当前流式文本（stop 之前拿，stop 后主进程会重置）
     const snapshotText = (finalText || currentText || '').trim();
 
     try {
-      // 标记 session 已停止，阻止 volume 回调继续触发 VAD
       isSessionRunning = false;
       currentText = '';
       finalText = '';
 
-      // 等 stop 真正完成（quick 模式：不等 ASR 最终结果，立刻关闭 WebSocket）
-      // 这样 asr-start 不会被 asr-stop 的 3 秒等待阻塞
+      stopMic();
       await window.electronAPI.asrStop({ quick: true });
 
-      // 有效文本送出
       if (segmentHasSpeech && snapshotText && onResultCallback) {
         onResultCallback(snapshotText);
       }
-
-      // 通知外部清空字幕
       if (onSegmentCallback) onSegmentCallback(snapshotText);
 
       resetVadState();
 
-      // 重启新 session，继续监听下一句
       if (isRecording) {
         await new Promise(r => setTimeout(r, AUTO_RESTART_DELAY_MS));
         await startAsrSession();
@@ -441,15 +459,17 @@ const VoiceMode = (() => {
     if (onModeChangeCallback) onModeChangeCallback(mode);
   }
 
-  function onModeChange(cb) { onModeChangeCallback = cb; }
+  // ─── 内部音量回调（供 VAD 之外的 UI 使用，如果有的话）───
+  let onVolumeCallback = null;
+  function onVolume(cb) { onVolumeCallback = cb; }
 
-  // ─── 事件注册 ───
-  function onResult(cb) { onResultCallback = cb; }
-  function onStart(cb) { onStartCallback = cb; }
-  function onStop(cb) { onStopCallback = cb; }
-  function onError(cb) { onErrorCallback = cb; }
-  function onStreaming(cb) { onStreamingCallback = cb; }
-  function onSegment(cb) { onSegmentCallback = cb; }
+  function onModeChange(cb) { onModeChangeCallback = cb; }
+  function onResult(cb)   { onResultCallback = cb; }
+  function onStart(cb)    { onStartCallback = cb; }
+  function onStop(cb)     { onStopCallback = cb; }
+  function onError(cb)    { onErrorCallback = cb; }
+  function onStreaming(cb){ onStreamingCallback = cb; }
+  function onSegment(cb)  { onSegmentCallback = cb; }
 
   return {
     init,
@@ -463,17 +483,15 @@ const VoiceMode = (() => {
     onStreaming,
     onSegment,
     onModeChange,
+    onVolume,
     setMode,
     setNoiseLevel,
-    get noiseLevel() { return noiseLevel; },
-    get noiseProfileName() { return (NOISE_PROFILES[noiseLevel] || NOISE_PROFILES[3]).name; },
-    MODE_SINGLE,
-    MODE_REALTIME,
-    get mode() { return mode; },
-    get isRecording() { return isRecording; },
-    get isBusy() { return isBusy; },
-    get isSupported() { return isSupported; },
-    get asrAvailable() { return asrAvailable; },
-    get micPermStatus() { return micPermStatus; },
+    get isSupported()    { return isSupported; },
+    get asrAvailable()   { return asrAvailable; },
+    get isRecording()    { return isRecording; },
+    get isSessionRunning(){ return isSessionRunning; },
+    get micPermStatus()  { return micPermStatus; },
+    get currentMode()    { return mode; },
+    get noiseLevel()     { return noiseLevel; },
   };
 })();

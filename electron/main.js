@@ -2657,7 +2657,7 @@ let asrWs = null;          // WebSocket 连接
 let asrSessionText = '';   // 当前会话累计文本
 let asrCurrentText = '';   // 当前句子的流式中间结果
 let asrFinalText = '';     // 所有已确认的最终文本
-let micProcess = null;     // ffmpeg 麦克风采集子进程
+
 
 function calcFrameDb(frameBuffer) {
   if (!frameBuffer || frameBuffer.length < 2) return -100;
@@ -2909,14 +2909,10 @@ ipcMain.handle('asr-check', async () => {
   };
 });
 
-// 开始流式识别会话：建立到腾讯云的 WebSocket 连接 + 启动 ffmpeg 麦克风采集
+// 开始流式识别会话：仅建立 WebSocket 连接（麦克风采集已移到渲染进程用 Web Audio API）
 ipcMain.handle('asr-start', async () => {
   try {
-    // 清理旧连接和旧进程
-    if (micProcess) {
-      try { micProcess.kill('SIGTERM'); } catch {}
-      micProcess = null;
-    }
+    // 清理旧连接
     if (asrWs) {
       try { asrWs.close(); } catch {}
       asrWs = null;
@@ -2937,7 +2933,6 @@ ipcMain.handle('asr-start', async () => {
     const wsUrl = buildAsrWsUrl(cfg);
     console.log('🎤 腾讯云 ASR 连接中...');
 
-    // 第一步：建立 ASR WebSocket 连接
     const wsReady = await new Promise((resolve) => {
       let settled = false;
 
@@ -2971,29 +2966,24 @@ ipcMain.handle('asr-start', async () => {
       asrWs.on('message', (data) => {
         try {
           const msg = JSON.parse(data.toString());
-          // 打印所有收到的 ASR 消息（调试用）
           console.log('🎤 ASR msg:', JSON.stringify({ code: msg.code, message: msg.message, final: msg.final, result: msg.result ? { slice_type: msg.result.slice_type, text: msg.result.voice_text_str } : null }));
-          
+
           if (msg.code !== 0) {
             console.warn('🎤 ASR 错误:', msg.code, msg.message);
             return;
           }
 
-          // result.voice_text_str 是当前句子的流式中间/最终结果
           if (msg.result) {
             const sliceType = msg.result.slice_type;
             const text = msg.result.voice_text_str || '';
 
-            if (sliceType === 0) {
-              asrCurrentText = text;
-            } else if (sliceType === 1) {
+            if (sliceType === 0 || sliceType === 1) {
               asrCurrentText = text;
             } else if (sliceType === 2) {
               asrFinalText += text;
               asrCurrentText = '';
             }
 
-            // 通知渲染进程流式结果
             if (mainWindow && !mainWindow.isDestroyed()) {
               mainWindow.webContents.send('asr-streaming-result', {
                 text: asrFinalText + asrCurrentText,
@@ -3031,136 +3021,6 @@ ipcMain.handle('asr-start', async () => {
       return wsReady;
     }
 
-    // 第二步：启动 ffmpeg 采集麦克风，输出 16kHz 16bit mono PCM 到 stdout
-    // 先检查系统麦克风权限
-    if (process.platform === 'darwin') {
-      const micStatus = systemPreferences.getMediaAccessStatus('microphone');
-      console.log(`🎤 启动 ffmpeg 前检查麦克风权限: ${micStatus}`);
-      if (micStatus !== 'granted') {
-        if (micStatus === 'not-determined') {
-          const granted = await systemPreferences.askForMediaAccess('microphone');
-          if (!granted) {
-            console.warn('🎤 用户拒绝了麦克风权限');
-            try { if (asrWs) asrWs.close(); } catch {} asrWs = null;
-            return { error: 'mic-denied', message: '需要麦克风权限才能使用语音功能。请在「系统设置 → 隐私与安全性 → 麦克风」中允许 QQ宠物 访问。' };
-          }
-        } else {
-          console.warn(`🎤 麦克风权限: ${micStatus}，无法启动 ffmpeg`);
-          try { if (asrWs) asrWs.close(); } catch {} asrWs = null;
-          return { error: 'mic-denied', message: `麦克风权限：${micStatus}。请前往「系统设置 → 隐私与安全性 → 麦克风」开启。` };
-        }
-      }
-    }
-    try {
-      // 动态查找 ffmpeg 路径（兼容 Homebrew arm64/x86、PATH 安装等）
-      function resolveFfmpegPath() {
-        const candidates = [
-          '/opt/homebrew/bin/ffmpeg',        // macOS arm64 Homebrew
-          '/usr/local/bin/ffmpeg',           // macOS x86 Homebrew / 手动安装
-          '/usr/bin/ffmpeg',                 // Linux 系统 ffmpeg
-          'ffmpeg',                          // PATH 中
-        ];
-        for (const p of candidates) {
-          try {
-            if (p === 'ffmpeg') {
-              require('child_process').execSync('which ffmpeg', { stdio: 'pipe' });
-              return p;
-            }
-            if (require('fs').existsSync(p)) return p;
-          } catch {}
-        }
-        return 'ffmpeg'; // 兜底，让系统 PATH 去找
-      }
-      const ffmpegPath = resolveFfmpegPath();
-      console.log(`🎤 使用 ffmpeg 路径: ${ffmpegPath}`);
-      micProcess = spawn(ffmpegPath, [
-        '-f', 'avfoundation',
-        '-i', ':default',           // 使用默认音频输入设备
-        '-ar', '16000',             // 采样率 16kHz
-        '-ac', '1',                 // 单声道
-        '-f', 's16le',              // 16bit little-endian PCM
-        '-acodec', 'pcm_s16le',
-        '-loglevel', 'error',       // 减少 ffmpeg 日志
-        'pipe:1',                   // 输出到 stdout
-      ], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
-
-      console.log('🎤 ffmpeg 麦克风采集已启动 (PID:', micProcess.pid, ')');
-
-      // ffmpeg stdout 的 PCM 数据按帧发给 ASR WebSocket
-      // 腾讯云 ASR 建议每 40ms 发送一帧 = 16000Hz × 2bytes × 0.04s = 1280 bytes
-      const FRAME_SIZE = 1280;
-      let micBytesSent = 0;
-      let micChunks = 0;
-      let pcmBuffer = Buffer.alloc(0);  // PCM 数据缓冲区
-      let lastVolumeEmitAt = 0;
-
-      micProcess.stdout.on('data', (chunk) => {
-        // 将新数据追加到缓冲区
-        pcmBuffer = Buffer.concat([pcmBuffer, chunk]);
-
-        // 按帧大小切割发送
-        while (pcmBuffer.length >= FRAME_SIZE) {
-          const frame = pcmBuffer.slice(0, FRAME_SIZE);
-          pcmBuffer = pcmBuffer.slice(FRAME_SIZE);
-          micChunks++;
-          micBytesSent += frame.length;
-
-          const now = Date.now();
-          if (mainWindow && !mainWindow.isDestroyed() && now - lastVolumeEmitAt >= 80) {
-            lastVolumeEmitAt = now;
-            const db = calcFrameDb(frame);
-            mainWindow.webContents.send('asr-volume', { db });
-          }
-
-          if (asrWs && asrWs.readyState === WebSocket.OPEN) {
-            asrWs.send(frame);
-          }
-        }
-
-        // 每 50 帧打一次日志（约 2 秒）
-        if (micChunks > 0 && micChunks % 50 === 0) {
-          console.log(`🎤 ffmpeg→ASR: ${micChunks} frames, ${micBytesSent}b sent, ws=${asrWs ? asrWs.readyState : 'null'}`);
-        }
-      });
-
-      micProcess.stderr.on('data', (data) => {
-        const msg = data.toString().trim();
-        if (msg) {
-          console.log('🎤 ffmpeg info:', msg);
-          // 检测权限拒绝
-          if (/permission denied|not authorized|access denied|couldn't use.*avfoundation/i.test(msg)) {
-            console.error('🎤 ⚠️ ffmpeg 麦克风权限被拒绝！');
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('asr-mic-permission-denied');
-            }
-          }
-        }
-      });
-
-      micProcess.on('error', (err) => {
-        console.error('🎤 ffmpeg 启动失败:', err.message);
-        micProcess = null;
-      });
-
-      micProcess.on('exit', (code) => {
-        // 发送剩余数据
-        if (pcmBuffer.length > 0 && asrWs && asrWs.readyState === WebSocket.OPEN) {
-          asrWs.send(pcmBuffer);
-          micBytesSent += pcmBuffer.length;
-          micChunks++;
-        }
-        console.log(`🎤 ffmpeg 退出, code: ${code}, 总共发送: ${micBytesSent} bytes, ${micChunks} frames`);
-        micProcess = null;
-      });
-
-    } catch (e) {
-      console.error('🎤 ffmpeg spawn 失败:', e.message);
-      // ffmpeg 失败不影响 ASR 连接，但实际没有音频数据
-      return { error: '麦克风采集启动失败: ' + e.message };
-    }
-
     return { ok: true };
   } catch (e) {
     console.error('🎤 asr-start 异常:', e.message);
@@ -3168,42 +3028,37 @@ ipcMain.handle('asr-start', async () => {
   }
 });
 
-// asr-feed 现在是空操作（音频数据直接在主进程从 ffmpeg→ASR WebSocket 流转）
-// 保留此 handler 以兼容渲染进程可能的旧调用
-ipcMain.handle('asr-feed', async () => {
-  return {
-    text: asrFinalText + asrCurrentText,
-    isEndpoint: false,
-  };
+// asr-feed：接收渲染进程（Web Audio API）推送的 PCM 帧，直接转发给 ASR WebSocket
+// data 可以是 ArrayBuffer 或 Uint8Array（由 IPC 序列化）
+ipcMain.handle('asr-feed', (event, data) => {
+  if (!asrWs || asrWs.readyState !== WebSocket.OPEN) {
+    return { ok: false };
+  }
+  try {
+    const buf = data instanceof Buffer ? data : Buffer.from(data);
+    asrWs.send(buf);
+    return { ok: true };
+  } catch (e) {
+    console.warn('🎤 asr-feed 发送失败:', e.message);
+    return { ok: false, error: e.message };
+  }
 });
 
 // 结束流式识别
-// quick=true：realtime 分段模式，跳过等待最终结果（用已有流式文本），让 asr-start 尽快启动
+// quick=true：realtime 分段模式，跳过等待最终结果，让 asr-start 尽快启动
 ipcMain.handle('asr-stop', async (event, { quick = false } = {}) => {
   try {
-    // 先停止 ffmpeg 麦克风采集
-    if (micProcess) {
-      try {
-        micProcess.kill('SIGTERM');
-        console.log('🎤 ffmpeg 麦克风采集已停止');
-      } catch {}
-      micProcess = null;
-    }
-
     const currentFullText = (asrFinalText + asrCurrentText).trim();
 
     if (asrWs && asrWs.readyState === WebSocket.OPEN) {
       try {
         if (quick) {
-          // realtime 分段：不等最终结果，直接关闭，让 asr-start 立即可用
           console.log('🎤 快速停止 ASR（realtime 分段模式）');
           try { asrWs.close(); } catch {}
         } else {
-          // 发送一个空的音频帧，通知 ASR 音频结束
-          // 腾讯云 ASR 会在收到空帧或连接关闭后返回最终结果
+          // 发送空帧通知 ASR 音频结束，等待最终结果（最多 3 秒）
           asrWs.send(Buffer.alloc(0));
 
-          // 等待最后的识别结果（最多 3 秒）
           await new Promise((resolve) => {
             const waitTimeout = setTimeout(() => {
               console.log('🎤 等待最终结果超时，使用已有结果');
@@ -3226,7 +3081,6 @@ ipcMain.handle('asr-stop', async (event, { quick = false } = {}) => {
 
             if (asrWs) {
               asrWs.on('message', onMessage);
-              // 清理
               setTimeout(() => {
                 try { if (asrWs) asrWs.removeListener('message', onMessage); } catch {}
               }, 3100);
@@ -3247,7 +3101,6 @@ ipcMain.handle('asr-stop', async (event, { quick = false } = {}) => {
     const finalText = (asrFinalText + asrCurrentText).trim();
     console.log(`🎤 腾讯云 ASR 最终结果: "${finalText}"`);
 
-    // 重置
     asrSessionText = '';
     asrCurrentText = '';
     asrFinalText = '';
@@ -3255,8 +3108,6 @@ ipcMain.handle('asr-stop', async (event, { quick = false } = {}) => {
     return { text: finalText || currentFullText };
   } catch (e) {
     console.error('🎤 asr-stop 异常:', e.message);
-    // 强制清理
-    if (micProcess) { try { micProcess.kill('SIGTERM'); } catch {} micProcess = null; }
     try { if (asrWs) asrWs.close(); } catch {}
     asrWs = null;
     const text = (asrFinalText + asrCurrentText).trim();
