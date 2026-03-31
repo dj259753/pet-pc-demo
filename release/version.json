@@ -1,6 +1,6 @@
 {
-  "version": "0.3.0",
-  "release_notes": "多显示器拖拽支持、退出动画修复、installer端口判断优化、麦克风权限状态显示",
-  "published_at": "2026-03-30",
-  "package_url": "https://github.com/dj259753/pet-pc-demo/releases/download/v0.3.0/QQ.-0.3.0-arm64-mac.zip"
+  "version": "0.3.1",
+  "release_notes": "自动配置全自动化：修复 QQClaw 接口探测超时、model 前缀自动规范化、安装向导路径修复、版本号统一至 0.3.1",
+  "published_at": "2026-03-31",
+  "package_url": "https://github.com/dj259753/pet-pc-demo/releases/download/v0.3.1/QQ.-0.3.1-arm64-mac.zip"
 }

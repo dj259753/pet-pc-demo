@@ -1673,7 +1673,7 @@ async function installerProbeChatEndpoint(url, token = '', model = 'openclaw:mai
     const res = await fetch(url, {
       method: 'POST',
       headers,
-      signal: AbortSignal.timeout(2500),
+      signal: AbortSignal.timeout(15000),
       body: JSON.stringify({
         model,
         messages: [{ role: 'user', content: 'ping' }],
@@ -1692,7 +1692,13 @@ async function installerProbeChatEndpoint(url, token = '', model = 'openclaw:mai
   } catch { return { ok: false, permError: false, errorDetail: '' }; }
 }
 
-// 返回 { url, permError, errorDetail }
+function installerNormalizeModelName(model) {
+  if (!model) return 'gpt-4';
+  const stripped = String(model).replace(/^(custom|qqclaw|openclaw|openai)[/:]/i, '').trim();
+  return stripped || 'gpt-4';
+}
+
+// 返回 { url, permError, errorDetail, model }
 async function installerDetectChatApiUrl(port, token = '', model = 'openclaw:main') {
   const candidates = [
     `/v1/chat/completions`,
@@ -1701,14 +1707,18 @@ async function installerDetectChatApiUrl(port, token = '', model = 'openclaw:mai
     `/api/v1/chat/completions`,
     `/chat/completions`,
   ];
+  const normalModel = installerNormalizeModelName(model);
+  const modelsToTry = model === normalModel ? [model] : [model, normalModel];
   let lastPermError = false, lastErrorDetail = '';
   for (const pathname of candidates) {
     const url = `http://127.0.0.1:${port}${pathname}`;
-    const r = await installerProbeChatEndpoint(url, token, model);
-    if (r.ok) return { url, permError: false, errorDetail: '' };
-    if (r.permError) { lastPermError = true; lastErrorDetail = r.errorDetail; }
+    for (const m of modelsToTry) {
+      const r = await installerProbeChatEndpoint(url, token, m);
+      if (r.ok) return { url, permError: false, errorDetail: '', model: m };
+      if (r.permError) { lastPermError = true; lastErrorDetail = r.errorDetail; }
+    }
   }
-  return { url: '', permError: lastPermError, errorDetail: lastErrorDetail };
+  return { url: '', permError: lastPermError, errorDetail: lastErrorDetail, model };
 }
 
 function installerEnsureChatCompletionsEnabled(configPath) {
@@ -1752,7 +1762,7 @@ function installerGetAgentSrcDir() {
     const p = path.join(process.resourcesPath, 'agents', 'qq-pet');
     if (fs.existsSync(p)) return p;
   }
-  return path.join(__dirname, '..', '..', 'agents', 'qq-pet');
+  return path.join(__dirname, '..', 'agents', 'qq-pet');
 }
 
 // scan-ports：扫描本地 QQClaw/OpenClaw 端口
@@ -1790,8 +1800,11 @@ ipcMain.handle('scan-ports', async () => {
   }
 
   const model = localCfg.model || (foundType === 'qqclaw' ? 'qqclaw:main' : 'openclaw:main');
-  const chatResult = foundPort ? await installerDetectChatApiUrl(foundPort, localCfg.token, model) : { url: '', permError: false, errorDetail: '' };
+  const chatResult = foundPort
+    ? await installerDetectChatApiUrl(foundPort, localCfg.token, model)
+    : { url: '', permError: false, errorDetail: '', model };
   let apiUrl = chatResult.url;
+  const resolvedModel = chatResult.model || model;
   let needsRestart = false;
   let repairNote = '';
   let permissionDenied = chatResult.permError;
@@ -1823,7 +1836,7 @@ ipcMain.handle('scan-ports', async () => {
     port:      foundPort,
     type:      foundType,
     token:     localCfg.token,
-    model,
+    model:     resolvedModel,
     apiUrl,
     chatReady: !!apiUrl && !permissionDenied,
     needsRestart,
@@ -1933,7 +1946,7 @@ ipcMain.handle('open-ai-setup', async () => {
     // 找 installer 的 index.html（优先打包内置的，开发时用桌面版）
     const candidates = [
       path.join(process.resourcesPath || '', 'installer', 'index.html'),   // 打包后内置
-      path.join(__dirname, '..', '..', 'installer', 'index.html'),         // 开发模式（相对源码）
+      path.join(__dirname, '..', 'installer', 'index.html'),               // 开发模式（bundle/pc-pet-demo/installer）
       path.join(os.homedir(), 'Desktop', 'qq-pet-installer-dev', 'index.html'), // 桌面开发版兜底
     ];
     let installerPath = null;
@@ -3946,7 +3959,7 @@ function launchInstallerIfNeeded() {
 
   const candidates = [
     path.join(process.resourcesPath || '', 'installer', 'index.html'),
-    path.join(__dirname, '..', '..', 'installer', 'index.html'),
+    path.join(__dirname, '..', 'installer', 'index.html'),
     path.join(os.homedir(), 'Desktop', 'qq-pet-installer-dev', 'index.html'),
   ];
   let installerPath = null;

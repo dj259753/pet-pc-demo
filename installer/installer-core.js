@@ -238,7 +238,7 @@ class InstallerCore {
     }
     fs.writeFileSync(
       path.join(skillsDir, '_skillhub_meta.json'),
-      JSON.stringify({ name: 'qq-pet', installedAt: Date.now(), source: 'bundled', version: '0.1.3' }, null, 2)
+      JSON.stringify({ name: 'qq-pet', installedAt: Date.now(), source: 'bundled', version: '0.3.1' }, null, 2)
     );
 
     // 随机性格
