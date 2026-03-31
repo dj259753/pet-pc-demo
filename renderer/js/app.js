@@ -118,6 +118,16 @@
       if (AIBrain.onStreamingReply) {
         AIBrain.onStreamingReply((partialText) => {
           BubbleSystem.updateStreamingBubble(partialText);
+          // 同步转发给对话终端窗口（流式显示）
+          if (window.electronAPI && window.electronAPI.sendQuickChatStreamChunk) {
+            window.electronAPI.sendQuickChatStreamChunk(partialText);
+          }
+        });
+      }
+      // Agent 工具执行进度：实时展示 agent 正在做什么
+      if (AIBrain.onToolProgress) {
+        AIBrain.onToolProgress((evt) => {
+          BubbleSystem.showToolProgress(evt);
         });
       }
     }
@@ -697,19 +707,16 @@
         if (typeof Personality !== 'undefined') Personality.onEvent('stroked');
         if (typeof PetMemory !== 'undefined') PetMemory.addEvent('stroked', '被主人抚摸了~');
 
-        // 抚摸动画：固定用 peaceful-interact-H1/H5，立即打断当前动画
+        // 抚摸动画：用当前心情的 H1/H5，playOnce 会先打断当前动画
         if (SpriteRenderer.qcLoaded) {
-          const strokeCandidates = ['peaceful-interact-H1', 'peaceful-interact-H5'];
-          const strokeAnim = strokeCandidates[Math.floor(Math.random() * strokeCandidates.length)];
+          const m2mood = PetState.mood || 'peaceful';
+          const strokeAnim = SpriteRenderer.getQCStroke(m2mood);
           if (strokeAnim) {
-            const m2mood = PetState.mood || 'peaceful';
-            SpriteRenderer.loadQCSheet(strokeAnim).then(() => {
-              // forceSetAnimation 先打断，再 playOnce 锁定播完
-              SpriteRenderer.forceSetAnimation(strokeAnim);
-              SpriteRenderer.playOnce(strokeAnim, () => {
-                const stand = SpriteRenderer.getQCStand(m2mood);
-                SpriteRenderer.setAnimation(stand || 'idle');
-              });
+            BehaviorEngine.pause();
+            SpriteRenderer.playOnce(strokeAnim, () => {
+              const stand = SpriteRenderer.getQCStand(m2mood);
+              SpriteRenderer.setAnimation(stand || 'idle');
+              BehaviorEngine.resume();
             });
           }
         } else {

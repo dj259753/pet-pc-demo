@@ -96,7 +96,7 @@ const DragSystem = (() => {
     dragTimer = null;
 
     window.electronAPI.dragEnd();
-    document.getElementById('pet-container').style.cursor = 'grab';
+    document.getElementById('pet-container').style.cursor = '';
 
     // compact模式下不恢复行为引擎（保持暂停）
     if (TaskbarUI.isCompact) {

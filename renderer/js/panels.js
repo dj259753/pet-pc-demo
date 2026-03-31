@@ -52,11 +52,6 @@ const PanelManager = (() => {
             BehaviorEngine.resume();
           });
         }, 1500);
-      } else {
-        SoundEngine.error();
-        shakeBtn(btn);
-        BubbleSystem.show('小鱼吃完了...😢', 2000);
-        setTimeout(() => BehaviorEngine.resume(), 1000);
       }
       updateInventoryUI();
     });
@@ -394,21 +389,21 @@ const PanelManager = (() => {
 
     // 喂食 badge
     const cookieCount = document.getElementById('cookie-count');
-    if (cookieCount) cookieCount.textContent = inv.cookie;
+    if (cookieCount) cookieCount.textContent = '∞';
 
     // 背包面板（如果存在）
     const invCookie = document.getElementById('inv-cookie');
     const invSoap = document.getElementById('inv-soap');
     const invCoffee = document.getElementById('inv-coffee');
     const invToy = document.getElementById('inv-toy');
-    if (invCookie) invCookie.textContent = `x${inv.cookie}`;
+    if (invCookie) invCookie.textContent = '∞';
     if (invSoap) invSoap.textContent = `x${inv.soap}`;
     if (invCoffee) invCoffee.textContent = `x${inv.coffee}`;
     if (invToy) invToy.textContent = `x${inv.toy}`;
 
-    // 喂食按钮禁用状态
+    // 喂食按钮不再禁用（小鱼干无限）
     const btnFeed = document.getElementById('btn-feed');
-    if (btnFeed) btnFeed.disabled = inv.cookie <= 0;
+    if (btnFeed) btnFeed.disabled = false;
 
     // 洗澡按钮禁用状态
     const btnSoap = document.getElementById('btn-soap');

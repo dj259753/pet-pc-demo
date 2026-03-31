@@ -163,14 +163,11 @@ const PetState = (() => {
     }
   }
 
-  // ─── 喂食 ───
+  // ─── 喂食（小鱼干无限） ───
   function feed() {
-    if (inventory.cookie <= 0) return false;
-    inventory.cookie--;
     setStat('hunger', stats.hunger + 20);
     setState(STATES.EATING, 8000);  // QC Eat动画约7秒
     emit('action', { type: 'feed' });
-    emit('inventory-change', { item: 'cookie', count: inventory.cookie });
     // 接入 AI 驱动系统
     if (typeof Personality !== 'undefined') Personality.onEvent('fed');
     if (typeof PetMemory !== 'undefined') PetMemory.addEvent('fed', '被喂了小鱼~');

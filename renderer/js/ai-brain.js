@@ -297,7 +297,7 @@ const AIBrain = (() => {
     // OpenAI 兼容格式: data.choices[0].message.content
     if (data.choices && data.choices.length > 0) {
       const msg = data.choices[0].message;
-      if (msg && msg.content) return msg.content;
+      if (msg && msg.content) return cleanModelOutput(msg.content);
     }
     // 兜底：豆包格式（向后兼容）
     if (data.output && Array.isArray(data.output)) {
@@ -309,7 +309,7 @@ const AIBrain = (() => {
           }
         }
       }
-      if (text) return text;
+      if (text) return cleanModelOutput(text);
     }
     return '';
   }
@@ -398,6 +398,51 @@ const AIBrain = (() => {
   let onStreamingReplyCallback = null;
   function onStreamingReply(cb) { onStreamingReplyCallback = cb; }
 
+  // ─── Agent 工具进度回调（外部注册，用于气泡展示工具执行状态） ───
+  let onToolProgressCallback = null;
+  function onToolProgress(cb) { onToolProgressCallback = cb; }
+
+  // ─── Agent thinking 回调（外部注册，用于展示推理过程） ───
+  let onThinkingCallback = null;
+  function onThinking(cb) { onThinkingCallback = cb; }
+
+  /**
+   * 清理模型原始输出中的 tool_call 标签和其他结构化标记
+   * 某些模型（doubao、qwen 等）支持 function calling 时会在回复中夹带这些标签
+   */
+  function cleanModelOutput(text) {
+    if (!text) return '';
+    let cleaned = text;
+
+    // 移除 <|tool_calls_section_begin|>...<|tool_calls_section_end|> 整块
+    cleaned = cleaned.replace(/<\|tool_calls_section_begin\|>[\s\S]*?<\|tool_calls_section_end\|>/g, '');
+
+    // 移除 <|tool_call_begin|>...<|tool_call_end|> 整块（含中间内容）
+    cleaned = cleaned.replace(/<\|tool_call_begin\|>[\s\S]*?<\|tool_call_end\|>/g, '');
+
+    // 移除单独的结构化标签
+    cleaned = cleaned.replace(/<\|(?:tool_calls_section_begin|tool_calls_section_end|tool_call_begin|tool_call_end|tool_sep|im_end|im_start|endoftext|pad)\|>/g, '');
+
+    // 移除 <tool_call>...</tool_call> 块
+    cleaned = cleaned.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '');
+
+    // 移除孤立的 JSON tool_call 格式（常见于模型直接输出 function_call）
+    // 匹配 {"name": "...", "arguments": ...} 或 {"function": ...} 这类纯 JSON
+    cleaned = cleaned.replace(/\{"(?:name|function|tool_calls)":\s*"[^"]*",\s*"arguments":\s*(?:\{[^}]*\}|"[^"]*")\s*\}/g, '');
+
+    // 移除 <think>...</think> 标签内容（部分模型的思考过程）
+    const thinkMatch = cleaned.match(/<think>([\s\S]*?)<\/think>/);
+    if (thinkMatch && onThinkingCallback) {
+      onThinkingCallback(thinkMatch[1].trim());
+    }
+    cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/g, '');
+
+    // 清理连续空行
+    cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+
+    return cleaned.trim();
+  }
+
   /**
    * 从整段文本解析 OpenAI 兼容 SSE（用于 Content-Type 不准或兜底）
    */
@@ -413,7 +458,7 @@ const AIBrain = (() => {
         if (delta) accumulated += delta;
       } catch { /* ignore line */ }
     }
-    return accumulated.trim();
+    return cleanModelOutput(accumulated);
   }
 
   /**
@@ -441,37 +486,91 @@ const AIBrain = (() => {
 
   /**
    * 解析 SSE 流，逐 token 累积并回调
+   * 增强：过滤 tool_call 标签，解析 finish_reason，处理 thinking 标记
    */
   async function readStream(res) {
     const reader = res.body.getReader();
     const decoder = new TextDecoder('utf-8');
-    let accumulated = '';
+    let rawAccumulated = '';   // 原始累积（未清理）
     let buffer = '';
+    let finishReason = null;
+    let lastDeltaTime = Date.now();
+    let silenceNotified = false;
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-
-      // 按行解析 SSE
-      const lines = buffer.split('\n');
-      buffer = lines.pop(); // 最后一行可能不完整，留到下次
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || trimmed === 'data: [DONE]') continue;
-        if (!trimmed.startsWith('data:')) continue;
-        try {
-          const json = JSON.parse(trimmed.slice(5).trim());
-          const delta = json?.choices?.[0]?.delta?.content || '';
-          if (delta) {
-            accumulated += delta;
-            if (onStreamingReplyCallback) onStreamingReplyCallback(accumulated);
-          }
-        } catch {}
+    // SSE 静默期检测：如果超过 3 秒没有 delta，说明 agent 在内部执行 tool
+    const silenceTimer = setInterval(() => {
+      if (!silenceNotified && Date.now() - lastDeltaTime > 3000 && !rawAccumulated) {
+        silenceNotified = true;
+        if (onToolProgressCallback) {
+          onToolProgressCallback({ type: 'agent_start' });
+        }
       }
+    }, 1000);
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // 按行解析 SSE
+        const lines = buffer.split('\n');
+        buffer = lines.pop(); // 最后一行可能不完整，留到下次
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed === 'data: [DONE]') continue;
+          if (!trimmed.startsWith('data:')) continue;
+          try {
+            const json = JSON.parse(trimmed.slice(5).trim());
+            const choice = json?.choices?.[0];
+
+            // 检查 finish_reason
+            if (choice?.finish_reason) {
+              finishReason = choice.finish_reason;
+            }
+
+            // 处理 assistant delta content
+            const delta = choice?.delta?.content || '';
+            if (delta) {
+              lastDeltaTime = Date.now();
+              rawAccumulated += delta;
+              // 首次收到 delta 且之前显示了 thinking → 清除
+              if (silenceNotified) {
+                silenceNotified = false;
+                if (onToolProgressCallback) {
+                  onToolProgressCallback({ type: 'agent_end' });
+                }
+              }
+              // 实时清理后推给气泡（用户不应看到原始标签）
+              const cleaned = cleanModelOutput(rawAccumulated);
+              if (cleaned && onStreamingReplyCallback) {
+                onStreamingReplyCallback(cleaned);
+              }
+            }
+
+            // 处理 tool_calls delta（某些模型/网关在 SSE 中也会发 tool_calls）
+            const toolDelta = choice?.delta?.tool_calls;
+            if (toolDelta && Array.isArray(toolDelta)) {
+              for (const tc of toolDelta) {
+                if (tc.function?.name && onToolProgressCallback) {
+                  onToolProgressCallback({
+                    phase: 'start',
+                    name: tc.function.name,
+                    toolCallId: tc.id || '',
+                  });
+                }
+              }
+            }
+          } catch {}
+        }
+      }
+    } finally {
+      clearInterval(silenceTimer);
     }
-    return accumulated.trim();
+
+    // 最终清理
+    return cleanModelOutput(rawAccumulated);
   }
 
   /**
@@ -613,6 +712,9 @@ const AIBrain = (() => {
     }
     if (!reply) throw new Error('AI返回为空');
 
+    // ── 最终清理：确保没有残留的模型标签 ──
+    reply = cleanModelOutput(reply);
+
     // ── 检测并执行 Soul 自我更新指令 ──
     let cleanReply = reply;
     const soulUpdateMatch = reply.match(/#soul-update:\s*(.+)/);
@@ -742,6 +844,25 @@ const AIBrain = (() => {
       });
     }
 
+    // 监听 Gateway 的 agent 事件（tool 执行进度、agent 生命周期等）
+    if (window.electronAPI && window.electronAPI.onAgentEvent) {
+      window.electronAPI.onAgentEvent((evt) => {
+        if (onToolProgressCallback) {
+          onToolProgressCallback(evt);
+        }
+        // 日志（调试用）
+        if (evt.type === 'tool_start') {
+          console.log(`🧠 Agent 工具开始: ${evt.name}`);
+        } else if (evt.type === 'tool_end') {
+          console.log(`🧠 Agent 工具完成: ${evt.name}`);
+        } else if (evt.type === 'agent_start') {
+          console.log('🧠 Agent 开始执行');
+        } else if (evt.type === 'agent_end') {
+          console.log('🧠 Agent 执行完成');
+        }
+      });
+    }
+
     console.log(`🧠 AI Brain 初始化完成 (provider: ${AI_PROVIDER})`);
   }
 
@@ -756,6 +877,9 @@ const AIBrain = (() => {
     loadSoul,
     updateSoulFile,
     onStreamingReply,
+    onToolProgress,
+    onThinking,
+    cleanModelOutput,
     get apiCallsToday() { return apiCallsToday; },
     get dailyMoodKeyword() { return dailyMoodKeyword; },
     get provider() { return AI_PROVIDER; },

@@ -140,6 +140,13 @@
       font-size: 18px;
       flex-shrink: 0;
       border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .msg-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
     }
 
     .msg.user .msg-avatar {
@@ -147,7 +154,7 @@
     }
 
     .msg.ai .msg-avatar {
-      background: #37404e;
+      background: transparent;
     }
 
     .msg-bubble {
@@ -422,7 +429,7 @@
   <div class="container">
     <!-- 自绘标题栏 -->
     <div class="titlebar">
-      <span class="titlebar-title">🐧 对话终端<span class="titlebar-subtitle">Cmd+U 唤起</span></span>
+      <span class="titlebar-title"><img src="sprites/qc-icon.png" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:6px;"> 对话终端<span class="titlebar-subtitle">Cmd+U 唤起</span></span>
       <button class="titlebar-btn" id="btn-clear" title="清空对话">🗑</button>
     </div>
 
@@ -559,7 +566,14 @@
 
       const avatar = document.createElement('div');
       avatar.className = 'msg-avatar';
-      avatar.textContent = role === 'user' ? '👤' : '🐧';
+      if (role === 'ai') {
+        const img = document.createElement('img');
+        img.src = 'sprites/qc-icon.png';
+        img.alt = '🐧';
+        avatar.appendChild(img);
+      } else {
+        avatar.textContent = '👤';
+      }
 
       const bubble = document.createElement('div');
       bubble.className = 'msg-bubble';
@@ -602,7 +616,10 @@
 
       const avatar = document.createElement('div');
       avatar.className = 'msg-avatar';
-      avatar.textContent = '🐧';
+      const avatarImg = document.createElement('img');
+      avatarImg.src = 'sprites/qc-icon.png';
+      avatarImg.alt = '🐧';
+      avatar.appendChild(avatarImg);
 
       const bubble = document.createElement('div');
       bubble.className = 'msg-bubble thinking';
@@ -622,11 +639,68 @@
       }
     }
 
+    // ─── 接收 AI 流式 chunk（逐 token 实时显示） ───
+    let streamingMsgEl = null;
+    let streamingBubbleEl = null;
+
+    if (window.quickChatAPI && window.quickChatAPI.onAIStreamChunk) {
+      window.quickChatAPI.onAIStreamChunk((text) => {
+        if (!text || !text.trim()) return;
+
+        // 如果还有思考动画，替换为流式气泡
+        if (thinkingEl) {
+          hideThinking();
+        }
+
+        if (streamingMsgEl && streamingBubbleEl) {
+          // 更新现有流式气泡
+          // 清空后重新用富文本渲染
+          streamingBubbleEl.innerHTML = '';
+          streamingBubbleEl.appendChild(renderRichText(text));
+          scrollToBottom();
+        } else {
+          // 首次创建流式气泡
+          const msg = document.createElement('div');
+          msg.className = 'msg ai';
+
+          const avatar = document.createElement('div');
+          avatar.className = 'msg-avatar';
+          const avatarImg = document.createElement('img');
+          avatarImg.src = 'sprites/qc-icon.png';
+          avatarImg.alt = '🐧';
+          avatar.appendChild(avatarImg);
+
+          const bubble = document.createElement('div');
+          bubble.className = 'msg-bubble';
+          bubble.appendChild(renderRichText(text));
+
+          msg.appendChild(avatar);
+          msg.appendChild(bubble);
+          messagesEl.appendChild(msg);
+
+          streamingMsgEl = msg;
+          streamingBubbleEl = bubble;
+          scrollToBottom();
+        }
+      });
+    }
+
     // ─── 接收 AI 回复 ───
     if (window.quickChatAPI && window.quickChatAPI.onAIReply) {
       window.quickChatAPI.onAIReply((text) => {
         hideThinking();
-        appendMessage('ai', text);
+
+        if (streamingMsgEl && streamingBubbleEl) {
+          // 流式气泡已存在 → 更新为最终文本
+          streamingBubbleEl.innerHTML = '';
+          streamingBubbleEl.appendChild(renderRichText(text));
+          streamingMsgEl = null;
+          streamingBubbleEl = null;
+        } else {
+          // 非流式 → 直接添加
+          appendMessage('ai', text);
+        }
+
         isWaiting = false;
         sendBtn.disabled = false;
         inputEl.focus();

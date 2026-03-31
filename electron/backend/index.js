@@ -67,6 +67,15 @@ async function startGateway() {
         }
       }
     },
+    onAgentLog: (evt) => {
+      // 将 agent 事件转发给渲染进程（用于气泡展示工具执行进度）
+      const { BrowserWindow } = require('electron');
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send('agent-event', evt);
+        }
+      }
+    },
   });
 
   await gateway.start();

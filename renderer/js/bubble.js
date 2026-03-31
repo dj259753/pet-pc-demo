@@ -11,8 +11,8 @@ const BubbleSystem = (() => {
 
   const MAX_VISIBLE = 3;     // 最多同时显示 3 条
   const MAX_CHARS = 100;     // 超过 100 字截断
-  const DEFAULT_DURATION = 6000;  // 默认显示时长
-  const FADE_DURATION = 8000;     // 旧消息额外存活时长
+  const DEFAULT_DURATION = 8000;  // 默认显示时长 8 秒
+  const FADE_DURATION = 10000;    // 旧消息额外存活时长
   const THROTTLE_MS = 3000;       // 全局节流：3秒内只允许1条新消息
 
   let hideTimer = null;      // 全部隐藏的定时器
@@ -71,6 +71,31 @@ const BubbleSystem = (() => {
       '这个问题很有趣呢...',
     ],
   };
+
+  // ─── 约束气泡不出窗口（动态偏移） ───
+  function clampBubblePosition() {
+    if (!stackEl) return;
+    // 重置为默认居中
+    stackEl.style.left = '50%';
+    stackEl.style.transform = 'translateX(-50%)';
+
+    // 等一帧让布局生效后检测
+    requestAnimationFrame(() => {
+      const rect = stackEl.getBoundingClientRect();
+      const winW = window.innerWidth || 320;
+      const margin = 4;
+
+      if (rect.left < margin) {
+        // 气泡左边出界了，往右推
+        const shift = margin - rect.left;
+        stackEl.style.transform = `translateX(calc(-50% + ${shift}px))`;
+      } else if (rect.right > winW - margin) {
+        // 气泡右边出界了，往左推
+        const shift = rect.right - (winW - margin);
+        stackEl.style.transform = `translateX(calc(-50% - ${shift}px))`;
+      }
+    });
+  }
 
   // ─── 创建一条气泡 DOM ───
   function createBubbleEl(displayText, fullText, isExpandable, isTruncated = false) {
@@ -167,6 +192,9 @@ const BubbleSystem = (() => {
     // 更新淡化样式
     updateFadeStyles();
 
+    // 约束气泡不出窗口
+    clampBubblePosition();
+
     // 打字机效果（仅最新一条）
     let charIdx = 0;
     const displayChars = display;
@@ -198,7 +226,7 @@ const BubbleSystem = (() => {
   }
 
   // ─── 显示气泡（带全局节流，3秒内最多1条） ───
-  function show(text, duration = 6000) {
+  function show(text, duration = 8000) {
     const now = Date.now();
     const elapsed = now - lastShowTime;
 
@@ -295,9 +323,9 @@ const BubbleSystem = (() => {
     if (streamingMsg && streamingMsg.el && streamingMsg.el.parentNode) {
       // 直接更新现有气泡
       streamingMsg.textSpan.textContent = display;
-      // 重置定时器，防止流式途中被移除
+      // 流式期间持续续命，不被中途删掉（60秒超长兜底）
       if (streamingMsg.timer) clearTimeout(streamingMsg.timer);
-      streamingMsg.timer = setTimeout(() => removeMessage(streamingMsg), DEFAULT_DURATION);
+      streamingMsg.timer = setTimeout(() => { removeMessage(streamingMsg); streamingMsg = null; }, 60000);
       return;
     }
 
@@ -319,17 +347,32 @@ const BubbleSystem = (() => {
     updateFadeStyles();
 
     textSpan.textContent = display;
-    msg.timer = setTimeout(() => { removeMessage(msg); streamingMsg = null; }, DEFAULT_DURATION);
+    // 流式期间超长存活
+    msg.timer = setTimeout(() => { removeMessage(msg); streamingMsg = null; }, 60000);
   }
 
   // ─── 显示 AI 回复（流式结束后调用，做最终确认） ───
   function showAIReply(text) {
     hideThinking();
-    // 清掉流式气泡（流式结束，换成最终完整版本）
-    if (streamingMsg) {
-      removeMessage(streamingMsg);
-      streamingMsg = null;
+
+    if (streamingMsg && streamingMsg.el && streamingMsg.el.parentNode) {
+      // 流式气泡已存在 → 直接更新为最终文本，不删除重建（避免闪烁）
+      const fullText = `🐧 ${text}`;
+      const { display } = truncate(fullText);
+      streamingMsg.textSpan.textContent = display;
+      streamingMsg.el.classList.remove('bubble-streaming');
+      streamingMsg.isStreaming = false;
+      // 重置定时器为正常存活时长
+      if (streamingMsg.timer) clearTimeout(streamingMsg.timer);
+      streamingMsg.timer = setTimeout(() => {
+        removeMessage(streamingMsg);
+        streamingMsg = null;
+      }, DEFAULT_DURATION);
+      return;
     }
+
+    // 没有流式气泡（非流式回复）→ 正常创建
+    streamingMsg = null;
     pushMessage(text, DEFAULT_DURATION, true);
   }
 
@@ -470,5 +513,84 @@ const BubbleSystem = (() => {
     }, 60000);
   }
 
-  return { show, hide, randomBubble, showAIReply, showThinking, hideThinking, showVoiceRecognizing, hideVoiceRecognizing, showSubtitle, hideSubtitle, updateStreamingBubble, showUpdateProgress };
+  // ─── Agent 工具执行进度展示 ───
+  const TOOL_DISPLAY_NAMES = {
+    read: '📖 正在读取文件',
+    write: '✏️ 正在写入文件',
+    exec: '⚡ 正在执行命令',
+    bash: '⚡ 正在执行命令',
+    search: '🔍 正在搜索',
+    glob: '🔍 正在搜索文件',
+    grep: '🔍 正在搜索内容',
+    fetch: '🌐 正在获取网页',
+    list: '📂 正在浏览目录',
+    edit: '✏️ 正在编辑文件',
+    patch: '✏️ 正在修改文件',
+    multi_edit: '✏️ 正在批量编辑',
+    think: '🤔 正在深度思考',
+    mcp: '🔌 正在调用工具',
+  };
+  let toolProgressMsg = null;
+
+  function showToolProgress(evt) {
+    if (!evt) return;
+
+    // agent_end → 清除进度气泡
+    if (evt.type === 'agent_end' || evt.type === 'tool_end') {
+      if (toolProgressMsg && toolProgressMsg.el && toolProgressMsg.el.parentNode) {
+        if (toolProgressMsg.timer) clearTimeout(toolProgressMsg.timer);
+        removeMessage(toolProgressMsg);
+        toolProgressMsg = null;
+      }
+      return;
+    }
+
+    // tool_start → 显示工具名称
+    if (evt.type === 'tool_start' && evt.name) {
+      const displayName = TOOL_DISPLAY_NAMES[evt.name] || `🔧 正在使用 ${evt.name}`;
+      const display = `${displayName}...`;
+
+      if (toolProgressMsg && toolProgressMsg.el && toolProgressMsg.el.parentNode) {
+        toolProgressMsg.textSpan.textContent = display;
+        if (toolProgressMsg.timer) clearTimeout(toolProgressMsg.timer);
+        toolProgressMsg.timer = setTimeout(() => {
+          removeMessage(toolProgressMsg);
+          toolProgressMsg = null;
+        }, 30000);
+        return;
+      }
+
+      // 首次创建（替换 thinking 气泡）
+      hideThinking();
+      const { el, textSpan } = createBubbleEl(display, display, false);
+      el.classList.add('bubble-tool-progress');
+
+      while (messages.length >= MAX_VISIBLE) removeMessage(messages[0]);
+      listEl.appendChild(el);
+
+      const msg = { el, textSpan, fullText: display, timer: null, isToolProgress: true };
+      messages.push(msg);
+      toolProgressMsg = msg;
+      textSpan.textContent = display;
+
+      stackEl.classList.remove('hidden');
+      updateFadeStyles();
+
+      msg.timer = setTimeout(() => {
+        removeMessage(msg);
+        toolProgressMsg = null;
+      }, 30000);
+      return;
+    }
+
+    // agent_start → 如果还没有其他进度，显示"正在思考"
+    if (evt.type === 'agent_start') {
+      if (!toolProgressMsg) {
+        showToolProgress({ type: 'tool_start', name: 'think' });
+      }
+      return;
+    }
+  }
+
+  return { show, hide, randomBubble, showAIReply, showThinking, hideThinking, showVoiceRecognizing, hideVoiceRecognizing, showSubtitle, hideSubtitle, updateStreamingBubble, showUpdateProgress, showToolProgress };
 })();

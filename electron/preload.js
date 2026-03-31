@@ -73,6 +73,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onQuickChatOpened: (callback) => ipcRenderer.on('quick-chat-opened', () => callback()),
   onQuickChatClosed: (callback) => ipcRenderer.on('quick-chat-closed', () => callback()),
   sendQuickChatReply: (text) => ipcRenderer.send('quick-chat-reply', { text }),
+  sendQuickChatStreamChunk: (text) => ipcRenderer.send('quick-chat-stream-chunk', { text }),
   sendQuickChatUserMsg: (text) => ipcRenderer.send('quick-chat-user-msg', { text }),
 
   // ─── Skills 接入窗口 ───
@@ -142,4 +143,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   backendRestartGateway: () => ipcRenderer.invoke('backend-restart-gateway'),
   backendIsSetupComplete: () => ipcRenderer.invoke('backend-is-setup-complete'),
   onGatewayStateChanged: (callback) => ipcRenderer.on('gateway-state-changed', (_, state) => callback(state)),
+  onAgentEvent: (callback) => ipcRenderer.on('agent-event', (_, evt) => callback(evt)),
 });

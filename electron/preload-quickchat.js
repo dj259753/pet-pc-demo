@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld('quickChatAPI', {
   // 监听 AI 回复（从主窗口转发过来）
   onAIReply: (callback) => ipcRenderer.on('ai-reply', (_, { text }) => callback(text)),
 
+  // 监听 AI 流式输出（逐 token 回调）
+  onAIStreamChunk: (callback) => ipcRenderer.on('ai-stream-chunk', (_, { text }) => callback(text)),
+
   // 监听用户消息（从主窗口转发的语音文本等）
   onUserMsg: (callback) => ipcRenderer.on('user-msg', (_, { text }) => callback(text)),
 

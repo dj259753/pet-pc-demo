@@ -55,6 +55,7 @@ class GatewayProcess {
     this.extraEnv = {};
     this.lastCrashTime = 0;
     this.onStateChange = opts.onStateChange || null;
+    this.onAgentLog = opts.onAgentLog || null;  // 回调：解析到 agent 事件时触发
   }
 
   getState() { return this.state; }
@@ -157,11 +158,13 @@ class GatewayProcess {
       const s = d.toString();
       process.stdout.write(`[gateway] ${s}`);
       diagLog(`stdout: ${s.trimEnd()}`);
+      this._parseAgentLog(s);
     });
     this.proc.stderr?.on('data', (d) => {
       const s = d.toString();
       process.stderr.write(`[gateway] ${s}`);
       diagLog(`stderr: ${s.trimEnd()}`);
+      this._parseAgentLog(s);
     });
 
     this.proc.on('exit', (code, signal) => {
@@ -345,6 +348,49 @@ class GatewayProcess {
     this.state = s;
     diagLog(`state: ${prev} → ${s}`);
     if (this.onStateChange) this.onStateChange(s);
+  }
+
+  /**
+   * 从 Gateway 子进程日志中解析 agent 事件
+   * OpenClaw 的 pi-embedded-runner 会输出类似:
+   *   "embedded run tool start: runId=xxx tool=read toolCallId=yyy"
+   *   "embedded run tool end: runId=xxx tool=read toolCallId=yyy"
+   *   "embedded run agent start: runId=xxx"
+   *   "embedded run agent end: runId=xxx"
+   *   "embedded run compaction start: runId=xxx"
+   */
+  _parseAgentLog(text) {
+    if (!this.onAgentLog) return;
+    const lines = text.split('\n');
+    for (const line of lines) {
+      // tool start
+      let m = line.match(/embedded run tool start:.*?tool=(\S+)/);
+      if (m) {
+        this.onAgentLog({ type: 'tool_start', name: m[1] });
+        continue;
+      }
+      // tool end
+      m = line.match(/embedded run tool end:.*?tool=(\S+)/);
+      if (m) {
+        this.onAgentLog({ type: 'tool_end', name: m[1] });
+        continue;
+      }
+      // agent start
+      if (line.includes('embedded run agent start:')) {
+        this.onAgentLog({ type: 'agent_start' });
+        continue;
+      }
+      // agent end
+      if (line.includes('embedded run agent end:')) {
+        this.onAgentLog({ type: 'agent_end' });
+        continue;
+      }
+      // compaction
+      if (line.includes('embedded run compaction start:')) {
+        this.onAgentLog({ type: 'compaction_start' });
+        continue;
+      }
+    }
   }
 
   // Windows 首次启动：解压 tar.gz

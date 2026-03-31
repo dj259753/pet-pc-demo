@@ -238,6 +238,7 @@ const BehaviorEngine = (() => {
         // 40% 概率彻底停下来不走了（切换到 IDLE）
         if (Math.random() < 0.40) {
           currentBehavior = BEHAVIOR.IDLE;
+          resetToCenter(); // 回到窗口中心，避免后续自主动画在偏移位置播放
           // 过较长时间后才可能重新走动
           setTimeout(() => {
             if (currentBehavior === BEHAVIOR.IDLE && !isMouseOver) {
@@ -267,6 +268,15 @@ const BehaviorEngine = (() => {
       currentBehavior = BEHAVIOR.PAUSED;
       SpriteRenderer.setAnimation(getIdleAnim());
     }
+    // 走完后回到窗口中心锚点，避免后续播放 play/interact 动画时企鹅偏到边上
+    resetToCenter();
+  }
+
+  /** 把 pet-container 回到窗口中心默认位置 */
+  function resetToCenter() {
+    posX = (WIN_W - PET_W) / 2;  // 80
+    posY = 200;
+    updatePosition();
   }
 
   // ─── 开心跳跃 ───
@@ -546,6 +556,7 @@ const BehaviorEngine = (() => {
               startWalking();
             } else {
               currentBehavior = BEHAVIOR.IDLE;
+              resetToCenter(); // 确保回到中心
             }
           }
         }
@@ -636,6 +647,7 @@ const BehaviorEngine = (() => {
             startWalking();
           } else {
             currentBehavior = BEHAVIOR.IDLE;
+            resetToCenter(); // 确保回到中心
           }
         }
       }, 8000);
@@ -675,6 +687,7 @@ const BehaviorEngine = (() => {
         if (isMouseOver) return;
 
         currentBehavior = BEHAVIOR.PAUSED;
+        resetToCenter(); // 确保企鹅在窗口中心再播动画
 
         // 播 Speak 动画（播完回 Stand，然后重新调度下一次）
         SpriteRenderer.playOnce(speakAnim, () => {
@@ -707,6 +720,7 @@ const BehaviorEngine = (() => {
         if (isMouseOver) return;
 
         currentBehavior = BEHAVIOR.PAUSED;
+        resetToCenter(); // 确保企鹅在窗口中心再播动画
 
         // 用 playOnce 播完一遍后自动回 Stand
         SpriteRenderer.playOnce(playAnim, () => {
@@ -732,6 +746,7 @@ const BehaviorEngine = (() => {
     stopWorking,
     getWorkProgress,
     resetInteractionTimer,
+    resetToCenter,
     deactivate,
     BEHAVIOR,
   };
