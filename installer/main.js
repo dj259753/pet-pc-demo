@@ -192,7 +192,16 @@ async function probeChatEndpoint(url, token = '', model = 'openclaw:main') {
   }
 }
 
-// 返回 { url, permError, errorDetail }
+// 把 "custom/model-name" / "provider:model-name" 等格式规范化为 model 裸名
+// QQClaw 网关只认不带前缀的 model id
+function normalizeModelName(model) {
+  if (!model) return 'gpt-4';
+  // 去掉 "custom/" "qqclaw:" "openclaw:" 等前缀
+  const stripped = model.replace(/^(custom|qqclaw|openclaw|openai)[/:]/i, '').trim();
+  return stripped || 'gpt-4';
+}
+
+// 返回 { url, permError, errorDetail, model }
 async function detectChatApiUrl(port, token = '', model = 'openclaw:main') {
   const candidates = [
     `/v1/chat/completions`,
@@ -201,12 +210,19 @@ async function detectChatApiUrl(port, token = '', model = 'openclaw:main') {
     `/api/v1/chat/completions`,
     `/chat/completions`,
   ];
+
+  // 同时尝试原始 model 和规范化后的 model（去掉 custom/ 前缀）
+  const normalModel = normalizeModelName(model);
+  const modelsToTry = model === normalModel ? [model] : [model, normalModel];
+
   let lastPermError = false, lastErrorDetail = '';
   for (const pathname of candidates) {
     const url = `http://127.0.0.1:${port}${pathname}`;
-    const r = await probeChatEndpoint(url, token, model);
-    if (r.ok) return { url, permError: false, errorDetail: '' };
-    if (r.permError) { lastPermError = true; lastErrorDetail = r.errorDetail; }
+    for (const m of modelsToTry) {
+      const r = await probeChatEndpoint(url, token, m);
+      if (r.ok) return { url, permError: false, errorDetail: '', model: m };
+      if (r.permError) { lastPermError = true; lastErrorDetail = r.errorDetail; }
+    }
   }
   return { url: '', permError: lastPermError, errorDetail: lastErrorDetail };
 }
@@ -301,8 +317,10 @@ ipcMain.handle('scan-ports', async () => {
   }
 
   const model = localCfg.model || (foundType === 'qqclaw' ? 'qqclaw:main' : 'openclaw:main');
-  const chatResult = foundPort ? await detectChatApiUrl(foundPort, localCfg.token, model) : { url: '', permError: false, errorDetail: '' };
+  const chatResult = foundPort ? await detectChatApiUrl(foundPort, localCfg.token, model) : { url: '', permError: false, errorDetail: '', model };
   let apiUrl = chatResult.url;
+  // 使用实际探测成功的 model 名（可能去掉了 custom/ 前缀）
+  const resolvedModel = chatResult.model || model;
   let needsRestart = false;
   let repairNote = '';
   let permissionDenied = chatResult.permError;
@@ -336,7 +354,7 @@ ipcMain.handle('scan-ports', async () => {
     port:      foundPort,
     type:      foundType,          // 'qqclaw' | 'openclaw' | null
     token:     localCfg.token,
-    model,
+    model:     resolvedModel,      // 实际能用的 model 名（已规范化）
     apiUrl,
     chatReady: !!apiUrl && !permissionDenied,
     needsRestart,

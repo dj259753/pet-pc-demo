@@ -869,6 +869,9 @@ async function runInstall({apiUrl='',token='',model='',clawType='',configured=fa
     det.innerHTML=`⚠️ ${result.error||'未知错误'}`;
   }
   showPanel('done');
+
+  // ── 安装完成后自动启动宠物（1.5秒后，给用户看到完成界面的时间）──
+  setTimeout(() => { window.installer.launchPet(); }, 1500);
 }
 
 function setIS(i,state) {
