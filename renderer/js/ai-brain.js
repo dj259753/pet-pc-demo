@@ -420,15 +420,26 @@ const AIBrain = (() => {
     // 移除 <|tool_call_begin|>...<|tool_call_end|> 整块（含中间内容）
     cleaned = cleaned.replace(/<\|tool_call_begin\|>[\s\S]*?<\|tool_call_end\|>/g, '');
 
+    // 移除 functions.xxx:N <|tool_call_argument_begin|> ... 到末尾（模型直出 function calling 文本）
+    cleaned = cleaned.replace(/functions\.\w+:\d+\s*<\|tool_call_argument_begin\|>[\s\S]*/g, '');
+
+    // 移除 <|tool_call_argument_begin|> ... <|tool_call_argument_end|> 块
+    cleaned = cleaned.replace(/<\|tool_call_argument_begin\|>[\s\S]*?<\|tool_call_argument_end\|>/g, '');
+
     // 移除单独的结构化标签
-    cleaned = cleaned.replace(/<\|(?:tool_calls_section_begin|tool_calls_section_end|tool_call_begin|tool_call_end|tool_sep|im_end|im_start|endoftext|pad)\|>/g, '');
+    cleaned = cleaned.replace(/<\|(?:tool_calls_section_begin|tool_calls_section_end|tool_call_begin|tool_call_end|tool_call_argument_begin|tool_call_argument_end|tool_sep|im_end|im_start|endoftext|pad)\|>/g, '');
 
     // 移除 <tool_call>...</tool_call> 块
     cleaned = cleaned.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '');
 
-    // 移除孤立的 JSON tool_call 格式（常见于模型直接输出 function_call）
-    // 匹配 {"name": "...", "arguments": ...} 或 {"function": ...} 这类纯 JSON
+    // 移除孤立的 JSON tool_call 格式
     cleaned = cleaned.replace(/\{"(?:name|function|tool_calls)":\s*"[^"]*",\s*"arguments":\s*(?:\{[^}]*\}|"[^"]*")\s*\}/g, '');
+
+    // 移除 #soul-update: 指令行
+    cleaned = cleaned.replace(/#soul-update:.*$/gm, '');
+
+    // 移除 NO_REPLY 标记
+    cleaned = cleaned.replace(/\bNO_REPLY\b/gi, '');
 
     // 移除 <think>...</think> 标签内容（部分模型的思考过程）
     const thinkMatch = cleaned.match(/<think>([\s\S]*?)<\/think>/);
@@ -574,22 +585,167 @@ const AIBrain = (() => {
   }
 
   /**
-   * 对话模式：支持多轮历史，流式输出
+   * 对话模式：优先走 Gateway RPC chat.send（完整 Agent loop），回退 fetch
    * @param {string} userText - 用户输入
    * @param {Array} history - 对话历史
    * @returns {Promise<string>}
    */
   async function chat(userText, history = [], options = {}) {
-    // ── system prompt（对话模式：Soul + 精简状态，减少 token）
+    // 降级模式
+    if (AI_PROVIDER === 'local' || !API_URL) {
+      throw new Error('本地降级模式');
+    }
+
+    // 日限额检查
+    const today = new Date().toDateString();
+    if (apiCallsDate !== today) { apiCallsDate = today; apiCallsToday = 0; }
+    if (apiCallsToday >= MAX_DAILY_CALLS) throw new Error('日调用限额已满');
+    apiCallsToday++;
+
+    // ── 优先走 Gateway RPC（完整 Agent loop，工具会被实际执行）──
+    const hasRpc = window.electronAPI && window.electronAPI.gatewayChatSend;
+    if (hasRpc) {
+      try {
+        const result = await window.electronAPI.gatewayChatSend(userText);
+        if (result && result.success) {
+          // chat.send 已被 Gateway 接受
+          // 流式回复和工具进度通过 IPC 事件自动推送（init 中已注册监听）
+          // 这里返回一个 Promise，等 chatFinalPromise 被 resolve
+          return awaitChatFinal();
+        }
+        console.warn('🧠 Gateway RPC 返回失败，回退 fetch:', result && result.error);
+      } catch (err) {
+        console.warn('🧠 Gateway RPC 异常，回退 fetch:', err.message);
+      }
+    }
+
+    // ── 回退：直连 Provider /chat/completions ──
+    return chatViaFetch(userText, history, options);
+  }
+
+  // ── Gateway chat.send 后等待 final 事件 ──
+  let _chatFinalResolve = null;
+  let _chatFinalReject = null;
+  let _chatFinalTimeout = null;
+  let _chatAccumulatedText = '';
+
+  function awaitChatFinal() {
+    // 清理上一轮
+    if (_chatFinalTimeout) clearTimeout(_chatFinalTimeout);
+    _chatAccumulatedText = '';
+
+    return new Promise((resolve, reject) => {
+      _chatFinalResolve = resolve;
+      _chatFinalReject = reject;
+      // 5分钟超时兜底
+      _chatFinalTimeout = setTimeout(() => {
+        const text = _chatAccumulatedText;
+        _chatFinalResolve = null;
+        _chatFinalReject = null;
+        if (text) {
+          resolve(cleanModelOutput(text));
+        } else {
+          reject(new Error('Gateway 响应超时'));
+        }
+      }, 300000);
+    });
+  }
+
+  /**
+   * 处理 Gateway chat 事件（在 init 中注册一次）
+   */
+  function handleGatewayChatEvent(payload) {
+    if (!payload) return;
+
+    if (payload.state === 'delta') {
+      const text = extractChatText(payload.message);
+      if (text !== null) {
+        _chatAccumulatedText = text;
+        const cleaned = cleanModelOutput(text);
+        if (cleaned && onStreamingReplyCallback) {
+          onStreamingReplyCallback(cleaned);
+        }
+      }
+    } else if (payload.state === 'final') {
+      const finalText = extractChatText(payload.message);
+      // 只在 final 有实质内容且比已累积的更长时才更新
+      if (finalText && finalText.trim().length > 0 && finalText.length >= _chatAccumulatedText.length) {
+        _chatAccumulatedText = finalText;
+      }
+      if (_chatFinalTimeout) clearTimeout(_chatFinalTimeout);
+      if (_chatFinalResolve) {
+        const cleaned = cleanModelOutput(_chatAccumulatedText);
+        _chatFinalResolve(cleaned || '✅ 已完成');
+        _chatFinalResolve = null;
+        _chatFinalReject = null;
+      }
+    } else if (payload.state === 'aborted') {
+      if (_chatFinalTimeout) clearTimeout(_chatFinalTimeout);
+      if (_chatFinalResolve) {
+        _chatFinalResolve(_chatAccumulatedText ? cleanModelOutput(_chatAccumulatedText) : '（已中断）');
+        _chatFinalResolve = null;
+        _chatFinalReject = null;
+      }
+    } else if (payload.state === 'error') {
+      if (_chatFinalTimeout) clearTimeout(_chatFinalTimeout);
+      if (_chatFinalReject) {
+        _chatFinalReject(new Error(payload.errorMessage || 'Agent 执行出错'));
+        _chatFinalResolve = null;
+        _chatFinalReject = null;
+      }
+    }
+  }
+
+  /**
+   * 处理 Gateway agent 事件（在 init 中注册一次）
+   */
+  function handleGatewayAgentEvent(payload) {
+    if (!payload) return;
+    const stream = payload.stream;
+    const data = payload.data || {};
+
+    if (stream === 'lifecycle') {
+      if (data.phase === 'start' && onToolProgressCallback) {
+        onToolProgressCallback({ type: 'agent_start' });
+      } else if (data.phase === 'end' && onToolProgressCallback) {
+        onToolProgressCallback({ type: 'agent_end' });
+      }
+    } else if (stream === 'tool') {
+      const phase = data.phase;
+      if (phase === 'start' && onToolProgressCallback) {
+        onToolProgressCallback({ type: 'tool_start', phase: 'start', name: data.name || 'tool', toolCallId: data.toolCallId || '', args: data.args });
+      } else if (phase === 'result' && onToolProgressCallback) {
+        onToolProgressCallback({ type: 'tool_end', phase: 'result', name: data.name || 'tool', toolCallId: data.toolCallId || '' });
+      }
+    }
+  }
+
+  /**
+   * 从 Gateway chat event message 中提取文本
+   */
+  function extractChatText(message) {
+    if (!message) return null;
+    const content = message.content;
+    if (typeof content === 'string') return content;
+    if (Array.isArray(content)) {
+      const parts = content.filter(p => p && p.type === 'text' && typeof p.text === 'string').map(p => p.text);
+      return parts.length > 0 ? parts.join('\n') : null;
+    }
+    if (typeof message.text === 'string') return message.text;
+    return null;
+  }
+
+  /**
+   * 回退方式：直接 fetch Provider /chat/completions
+   */
+  async function chatViaFetch(userText, history = [], options = {}) {
     const personality = typeof Personality !== 'undefined' ? Personality : null;
     const now = new Date();
     const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 
-    // 优先用加载好的 Soul，否则用默认基础人设
     let prompt = cachedSoul
       ? `${cachedSoul}\n\n---\n`
       : `你是桌面宠物"QQ企鹅"，定位是可靠的桌面协作伙伴。表达风格友好、清晰、务实，不要装可爱过头。\n`;
-
     if (personality) {
       const p = personality.getCurrent();
       prompt += `性格：${p.mbti}，${p.speakStyle}\n`;
@@ -598,97 +754,18 @@ const AIBrain = (() => {
     prompt += `当前时间：${weekdays[now.getDay()]} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}（${getTimePeriod(now.getHours())}）\n`;
     prompt += `回复要求：自然口语化，30-80字，信息明确，少用 emoji。只输出回复本身，不加前缀。\n`;
 
-    // ── 人设自我更新检测：如果用户说的话包含「以后你要更...」「你可以更...」之类偏好描述，触发更新
-    const soulUpdateKeywords = ['以后你', '你以后', '你可以更', '希望你', '我希望你', '你应该更'];
-    const mightUpdateSoul = soulUpdateKeywords.some(kw => userText.includes(kw));
-    if (mightUpdateSoul) {
-      prompt += `\n[特别注意] 如果主人的这句话表达了对你说话风格/性格/行为的偏好调整，请在回复末尾追加一行（以"#soul-update:"开头），格式：\n#soul-update: <对 SOUL.md 里"说话风格"或"核心定位"的具体修改建议，一句话>\n如果没有明显的偏好调整，不要追加这行。\n`;
-    }
-
-    const messages = [
-      { role: 'system', content: prompt },
-    ];
-
-    // 追加历史（最近 8 条，减少 token）
+    const messages = [{ role: 'system', content: prompt }];
     const recentHistory = history.slice(-8);
     for (const msg of recentHistory) {
-      messages.push({
-        role: msg.role,
-        content: msg.text || msg.content,
-      });
+      messages.push({ role: msg.role, content: msg.text || msg.content });
     }
-
-    const attachments = Array.isArray(options.attachments) ? options.attachments : [];
-    const attachmentLines = attachments.map((att, i) => {
-      const kind = att.type === 'image' ? '图片' : '文件';
-      return `${i + 1}. ${kind}: ${att.name || '未命名'} (${att.path || '无路径'})`;
-    });
-    const attachmentSummary = attachmentLines.length > 0
-      ? `\n\n[用户附件]\n${attachmentLines.join('\n')}\n如果是图片，请结合图片内容回复；如果无法读取图像内容，请明确说明并基于文字信息继续帮助。`
-      : '';
-
-    const imageAttachments = attachments.filter(att => att.type === 'image' && att.dataUrl);
-    const useVisionPayload = imageAttachments.length > 0;
-
-    if (useVisionPayload) {
-      const content = [{ type: 'text', text: `${userText}${attachmentSummary}` }];
-      imageAttachments.slice(0, 3).forEach((img) => {
-        content.push({
-          type: 'image_url',
-          image_url: { url: img.dataUrl },
-        });
-      });
-      messages.push({ role: 'user', content });
-    } else {
-      messages.push({
-        role: 'user',
-        content: `${userText}${attachmentSummary}`,
-      });
-    }
-
-    // 降级模式
-    if (AI_PROVIDER === 'local' || !API_URL) {
-      throw new Error('本地降级模式');
-    }
-
-    // 日限额检查
-    const today = new Date().toDateString();
-    if (apiCallsDate !== today) {
-      apiCallsDate = today;
-      apiCallsToday = 0;
-    }
-    if (apiCallsToday >= MAX_DAILY_CALLS) {
-      throw new Error('日调用限额已满');
-    }
+    messages.push({ role: 'user', content: userText });
 
     const headers = { 'Content-Type': 'application/json' };
-    if (API_KEY) {
-      headers['Authorization'] = `Bearer ${API_KEY}`;
-    }
+    if (API_KEY) headers['Authorization'] = `Bearer ${API_KEY}`;
 
     const bodyBase = { model: MODEL, messages, temperature: 0.85, stream: true };
-
-    let res = await fetch(API_URL, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(bodyBase),
-    });
-
-    // 某些模型不支持 image_url，自动降级为纯文本重试
-    if (!res.ok && useVisionPayload) {
-      const fallbackMessages = messages.slice(0, -1);
-      fallbackMessages.push({
-        role: 'user',
-        content: `${userText}${attachmentSummary}\n[说明] 当前模型可能不支持图片理解，请至少根据附件名称和路径给出配置建议。`,
-      });
-      res = await fetch(API_URL, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ ...bodyBase, messages: fallbackMessages }),
-      });
-    }
-
-    apiCallsToday++;
+    let res = await fetch(API_URL, { method: 'POST', headers, body: JSON.stringify(bodyBase) });
 
     if (!res.ok) {
       const errText = await res.text().catch(() => '');
@@ -696,56 +773,13 @@ const AIBrain = (() => {
     }
 
     let reply = await consumeChatResponse(res);
-    // 仍为空时：再试一次非流式请求（部分本地网关只实现 JSON 模式）
     if (!reply) {
-      const res2 = await fetch(API_URL, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ ...bodyBase, stream: false }),
-      });
-      apiCallsToday++;
-      if (!res2.ok) {
-        const errText = await res2.text().catch(() => '');
-        throw new Error(`API ${res2.status}: ${errText.substring(0, 100)}`);
-      }
+      const res2 = await fetch(API_URL, { method: 'POST', headers, body: JSON.stringify({ ...bodyBase, stream: false }) });
+      if (!res2.ok) { const errText = await res2.text().catch(() => ''); throw new Error(`API ${res2.status}: ${errText.substring(0, 100)}`); }
       reply = await consumeChatResponse(res2);
     }
     if (!reply) throw new Error('AI返回为空');
-
-    // ── 最终清理：确保没有残留的模型标签 ──
-    reply = cleanModelOutput(reply);
-
-    // ── 检测并执行 Soul 自我更新指令 ──
-    let cleanReply = reply;
-    const soulUpdateMatch = reply.match(/#soul-update:\s*(.+)/);
-    if (soulUpdateMatch) {
-      const updateHint = soulUpdateMatch[1].trim();
-      cleanReply = reply.replace(/#soul-update:.*/, '').trim();
-
-      // 异步执行 Soul 更新（不阻塞当前回复）
-      (async () => {
-        try {
-          const currentSoul = await loadSoul();
-          if (!currentSoul) return;
-          // 请求 AI 生成新的 SOUL.md
-          const updatePrompt = `以下是当前的 SOUL.md 内容：\n\n${currentSoul}\n\n主人希望做的调整：${updateHint}\n\n请在保留原有结构和大部分内容的基础上，做最小必要的修改，输出完整的新 SOUL.md 内容。只输出文件内容本身，不要加任何说明。`;
-          const newSoul = await callAI(updatePrompt, '请更新 SOUL.md', 0.4);
-          if (newSoul && newSoul.length > 100) {
-            await updateSoulFile(SOUL_PATH, newSoul, updateHint);
-            console.log('🧠 SOUL.md 已根据主人偏好自动更新');
-          }
-        } catch (e) {
-          console.warn('🧠 Soul 自动更新失败:', e.message);
-        }
-      })();
-    }
-
-    // 记录到记忆
-    if (typeof PetMemory !== 'undefined') {
-      PetMemory.addEvent('chat', `和主人聊天: "${userText.substring(0, 20)}${userText.length > 20 ? '...' : ''}"`);
-    }
-
-    return cleanReply;
+    return cleanModelOutput(reply);
   }
 
   /**
@@ -844,22 +878,24 @@ const AIBrain = (() => {
       });
     }
 
-    // 监听 Gateway 的 agent 事件（tool 执行进度、agent 生命周期等）
+    // 监听 Gateway 的 agent 事件（tool 执行进度、agent 生命周期等）— 旧的 stdout 解析方式
     if (window.electronAPI && window.electronAPI.onAgentEvent) {
       window.electronAPI.onAgentEvent((evt) => {
         if (onToolProgressCallback) {
           onToolProgressCallback(evt);
         }
-        // 日志（调试用）
-        if (evt.type === 'tool_start') {
-          console.log(`🧠 Agent 工具开始: ${evt.name}`);
-        } else if (evt.type === 'tool_end') {
-          console.log(`🧠 Agent 工具完成: ${evt.name}`);
-        } else if (evt.type === 'agent_start') {
-          console.log('🧠 Agent 开始执行');
-        } else if (evt.type === 'agent_end') {
-          console.log('🧠 Agent 执行完成');
-        }
+      });
+    }
+
+    // ── Gateway RPC 事件监听（WebSocket 长连接，chat.send 后的流式回复和工具进度）──
+    if (window.electronAPI && window.electronAPI.onGatewayChatEvent) {
+      window.electronAPI.onGatewayChatEvent((payload) => {
+        handleGatewayChatEvent(payload);
+      });
+    }
+    if (window.electronAPI && window.electronAPI.onGatewayAgentEvent) {
+      window.electronAPI.onGatewayAgentEvent((payload) => {
+        handleGatewayAgentEvent(payload);
       });
     }
 

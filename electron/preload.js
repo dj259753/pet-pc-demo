@@ -74,6 +74,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onQuickChatClosed: (callback) => ipcRenderer.on('quick-chat-closed', () => callback()),
   sendQuickChatReply: (text) => ipcRenderer.send('quick-chat-reply', { text }),
   sendQuickChatStreamChunk: (text) => ipcRenderer.send('quick-chat-stream-chunk', { text }),
+  sendQuickChatToolProgress: (evt) => ipcRenderer.send('quick-chat-tool-progress', evt),
   sendQuickChatUserMsg: (text) => ipcRenderer.send('quick-chat-user-msg', { text }),
 
   // ─── Skills 接入窗口 ───
@@ -93,6 +94,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // ─── AI 配置（从 ~/.qq-pet/config/ai-config.json 读取） ───
   getAIConfig: () => ipcRenderer.invoke('get-ai-config'),
+
+  // ─── Gateway RPC 聊天（走完整 Agent loop，工具调用会被实际执行） ───
+  gatewayChatSend: (message, sessionKey) => ipcRenderer.invoke('gateway-chat-send', { message, sessionKey }),
+  gatewayChatAbort: (runId, sessionKey) => ipcRenderer.invoke('gateway-chat-abort', { runId, sessionKey }),
+  gatewayChatHistory: (sessionKey, limit) => ipcRenderer.invoke('gateway-chat-history', { sessionKey, limit }),
+  gatewayRpcStatus: () => ipcRenderer.invoke('gateway-rpc-status'),
+
+  // 监听 Gateway chat 事件（delta/final/error/aborted）
+  onGatewayChatEvent: (callback) => ipcRenderer.on('gateway-chat-event', (_, payload) => callback(payload)),
+  // 监听 Gateway agent 事件（tool start/end, lifecycle start/end）
+  onGatewayAgentEvent: (callback) => ipcRenderer.on('gateway-agent-event', (_, payload) => callback(payload)),
+  // 监听 Gateway RPC 连接就绪
+  onGatewayRpcConnected: (callback) => ipcRenderer.on('gateway-rpc-connected', () => callback()),
+
   delegateToWorkBuddy: (payload) => ipcRenderer.invoke('workbuddy-delegate', payload),
   checkUpdatesNow: () => ipcRenderer.invoke('check-updates-now'),
   onUpdateAvailable: (callback) => ipcRenderer.on('update-available', (_, data) => callback(data)),

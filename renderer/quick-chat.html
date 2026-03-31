@@ -2,7 +2,35 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>对话终端</title>
+  <title>对话</title>
+  <!-- Markdown 渲染 + 代码高亮 + 安全过滤 -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github-dark.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/core.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/javascript.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/typescript.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/python.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/bash.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/json.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/css.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/xml.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/java.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/go.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/sql.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/yaml.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/shell.min.js"></script>
+  <script>
+    // 注册语言别名
+    hljs.registerLanguage('javascript', hljs.getLanguage('javascript') ? () => hljs.getLanguage('javascript') : () => ({}));
+    hljs.registerLanguage('js', hljs.getLanguage('javascript') ? () => hljs.getLanguage('javascript') : () => ({}));
+    hljs.registerLanguage('ts', hljs.getLanguage('typescript') ? () => hljs.getLanguage('typescript') : () => ({}));
+    hljs.registerLanguage('py', hljs.getLanguage('python') ? () => hljs.getLanguage('python') : () => ({}));
+    hljs.registerLanguage('sh', hljs.getLanguage('bash') ? () => hljs.getLanguage('bash') : () => ({}));
+    hljs.registerLanguage('zsh', hljs.getLanguage('shell') ? () => hljs.getLanguage('shell') : () => ({}));
+    hljs.registerLanguage('html', hljs.getLanguage('xml') ? () => hljs.getLanguage('xml') : () => ({}));
+    hljs.registerLanguage('yml', hljs.getLanguage('yaml') ? () => hljs.getLanguage('yaml') : () => ({}));
+  </script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -42,398 +70,278 @@
       user-select: none;
       flex-shrink: 0;
     }
-
-    .titlebar-title {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text);
-      flex: 1;
-    }
-
-    .titlebar-subtitle {
-      font-size: 11px;
-      color: var(--text-secondary);
-      margin-left: 8px;
-      font-weight: 400;
-    }
-
+    .titlebar-title { font-size: 14px; font-weight: 600; color: var(--text); flex: 1; }
+    .titlebar-subtitle { font-size: 11px; color: var(--text-secondary); margin-left: 8px; font-weight: 400; }
     .titlebar-btn {
       -webkit-app-region: no-drag;
-      width: 28px;
-      height: 28px;
-      border: none;
-      background: var(--panel-elev-2);
-      border-radius: 8px;
-      border: 1px solid var(--border-soft);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 16px;
-      color: var(--text-secondary);
+      width: 28px; height: 28px; border: none;
+      background: var(--panel-elev-2); border-radius: 8px;
+      border: 1px solid var(--border-soft); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; color: var(--text-secondary);
       transition: background 0.15s, color 0.15s;
     }
-
-    .titlebar-btn:hover {
-      background: #252b36;
-      color: var(--text);
-    }
+    .titlebar-btn:hover { background: #252b36; color: var(--text); }
 
     /* ─── 主容器 ─── */
-    .container {
-      display: flex;
-      flex-direction: column;
-      height: 100%;
-    }
+    .container { display: flex; flex-direction: column; height: 100%; }
 
     /* ─── 消息列表 ─── */
     .messages {
-      flex: 1;
-      overflow-y: auto;
-      overflow-x: hidden;
-      padding: 14px 18px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
+      flex: 1; overflow-y: auto; overflow-x: hidden;
+      padding: 14px 18px; display: flex; flex-direction: column; gap: 12px;
       background: var(--panel-bg);
     }
-
-    .messages::-webkit-scrollbar {
-      width: 5px;
-    }
-    .messages::-webkit-scrollbar-track {
-      background: transparent;
-    }
-    .messages::-webkit-scrollbar-thumb {
-      background: #343b47;
-      border-radius: 3px;
-    }
-    .messages::-webkit-scrollbar-thumb:hover {
-      background: #424a58;
-    }
+    .messages::-webkit-scrollbar { width: 5px; }
+    .messages::-webkit-scrollbar-track { background: transparent; }
+    .messages::-webkit-scrollbar-thumb { background: #343b47; border-radius: 3px; }
 
     /* ─── 消息气泡 ─── */
-    .msg {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      max-width: 85%;
-      animation: msgIn 0.25s ease;
-    }
-
-    .msg.user {
-      align-self: flex-end;
-      flex-direction: row-reverse;
-    }
-
-    .msg.ai {
-      align-self: flex-start;
-    }
+    .msg { display: flex; align-items: flex-start; gap: 10px; max-width: 88%; animation: msgIn 0.25s ease; }
+    .msg.user { align-self: flex-end; flex-direction: row-reverse; }
+    .msg.ai { align-self: flex-start; }
 
     .msg-avatar {
-      width: 34px;
-      height: 34px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      flex-shrink: 0;
-      border: 1px solid var(--border);
-      overflow: hidden;
+      width: 34px; height: 34px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0; border: 1px solid var(--border); overflow: hidden;
     }
-
-    .msg-avatar img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    .msg.user .msg-avatar {
-      background: #324066;
-    }
-
-    .msg.ai .msg-avatar {
-      background: transparent;
-    }
+    .msg-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .msg.user .msg-avatar { background: #324066; }
+    .msg.ai .msg-avatar { background: transparent; }
 
     .msg-bubble {
-      padding: 10px 12px;
-      border-radius: var(--radius);
-      font-size: 14px;
-      line-height: 1.6;
-      word-break: break-word;
-      white-space: pre-wrap;
-      border: 1px solid var(--border);
+      padding: 10px 14px; border-radius: var(--radius);
+      font-size: 14px; line-height: 1.6; word-break: break-word;
+      border: 1px solid var(--border); position: relative;
+      min-width: 40px;
     }
-
     .msg.user .msg-bubble {
-      background: var(--user-bubble);
-      color: var(--text);
-      border: 1px solid #3a4a72;
-      border-bottom-right-radius: 6px;
+      background: var(--user-bubble); color: var(--text);
+      border: 1px solid #3a4a72; border-bottom-right-radius: 6px;
+      white-space: pre-wrap;
     }
-
     .msg.ai .msg-bubble {
-      background: var(--ai-bubble);
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-bottom-left-radius: 6px;
+      background: var(--ai-bubble); color: var(--text);
+      border: 1px solid var(--border); border-bottom-left-radius: 6px;
     }
 
     /* 思考中动画 */
-    .msg.ai .msg-bubble.thinking {
-      color: var(--text-secondary);
+    .msg.ai .msg-bubble.thinking { color: var(--text-secondary); }
+    .thinking-dots::after { content: ''; animation: dots 1.2s steps(4, end) infinite; }
+    @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+    @keyframes msgIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* ─── 流式光标 ─── */
+    .streaming-cursor {
+      display: inline-block; width: 2px; height: 16px;
+      background: var(--primary); margin-left: 2px;
+      vertical-align: text-bottom; animation: blink-cursor 1s step-end infinite;
+    }
+    @keyframes blink-cursor { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+    /* ─── 消息复制按钮（悬浮） ─── */
+    .msg-copy-btn {
+      position: absolute; top: 6px; right: 6px;
+      width: 26px; height: 26px; border: none; border-radius: 6px;
+      background: rgba(255,255,255,0.06); color: var(--text-dim);
+      cursor: pointer; display: none; align-items: center; justify-content: center;
+      font-size: 13px; transition: background 0.15s; z-index: 1;
+    }
+    .msg-bubble:hover .msg-copy-btn { display: flex; }
+    .msg-copy-btn:hover { background: rgba(255,255,255,0.14); color: var(--text); }
+    .msg-copy-btn.copied { color: #22c55e; }
+
+    /* ─── Think 可折叠 ─── */
+    .think-block {
+      margin: 0 0 8px 0; border-radius: 8px;
+      border: 1px solid rgba(139,92,246,0.2);
+      background: rgba(139,92,246,0.06); overflow: hidden;
+    }
+    .think-header {
+      display: flex; align-items: center; gap: 6px;
+      padding: 7px 12px; border: none; width: 100%;
+      background: transparent; color: #a78bfa;
+      font-size: 12px; font-weight: 500; cursor: pointer; text-align: left;
+      transition: background 0.15s;
+    }
+    .think-header:hover { background: rgba(139,92,246,0.1); }
+    .think-arrow { font-size: 10px; transition: transform 0.2s; }
+    .think-block.open .think-arrow { transform: rotate(90deg); }
+    .think-content {
+      display: none; padding: 8px 12px;
+      font-size: 13px; line-height: 1.6; color: var(--text-secondary);
+      border-top: 1px solid rgba(139,92,246,0.15);
+    }
+    .think-block.open .think-content { display: block; }
+
+    /* ─── 工具调用卡片 ─── */
+    .tool-card {
+      margin: 4px 0; padding: 8px 12px; border-radius: 8px;
+      border: 1px solid rgba(59,130,246,0.2);
+      background: rgba(59,130,246,0.06); font-size: 13px;
+    }
+    .tool-card-header {
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .tool-card-title { display: flex; align-items: center; gap: 6px; font-weight: 500; color: #93c5fd; }
+    .tool-card-icon { font-size: 14px; }
+    .tool-card-status { color: #22c55e; font-weight: 600; font-size: 12px; }
+    .tool-card-spinner {
+      width: 14px; height: 14px; border: 2px solid rgba(59,130,246,0.3);
+      border-top-color: #60a5fa; border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    .tool-card-detail {
+      margin-top: 4px; font-size: 11px; color: var(--text-dim);
+      word-break: break-all; max-height: 60px; overflow: hidden;
+    }
+    .tool-card-output {
+      margin-top: 6px; padding: 6px 8px; border-radius: 4px;
+      background: #1e1e1e; color: #d4d4d4;
+      font-family: 'SF Mono', Menlo, monospace; font-size: 12px;
+      line-height: 1.5; white-space: pre-wrap; overflow: hidden;
+      max-height: 120px;
+    }
+    .tool-card.expandable { cursor: pointer; }
+    .tool-card.expandable:hover { background: rgba(59,130,246,0.1); }
+    .tool-card.expanded .tool-card-output { max-height: none; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── Markdown 内容样式 ─── */
+    .md-content { white-space: normal; }
+    .md-content p { margin: 0; }
+    .md-content p + p { margin-top: 8px; }
+    .md-content ul, .md-content ol { margin: 4px 0; padding-left: 20px; }
+    .md-content li { margin: 2px 0; }
+    .md-content a { color: #60a5fa; text-decoration: none; }
+    .md-content a:hover { text-decoration: underline; }
+    .md-content strong { font-weight: 600; }
+    .md-content em { font-style: italic; }
+    .md-content h1, .md-content h2, .md-content h3, .md-content h4 {
+      margin: 12px 0 4px; font-weight: 600; line-height: 1.4;
+    }
+    .md-content h1 { font-size: 1.25em; }
+    .md-content h2 { font-size: 1.12em; }
+    .md-content h3 { font-size: 1.05em; }
+    .md-content h4 { font-size: 1em; }
+    .md-content hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+    .md-content blockquote {
+      border-left: 3px solid rgba(255,255,255,0.15);
+      margin: 8px 0; padding: 4px 12px; color: var(--text-secondary);
+    }
+    .md-content table { border-collapse: collapse; margin: 8px 0; font-size: 13px; }
+    .md-content th, .md-content td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; }
+    .md-content th { font-weight: 600; background: rgba(255,255,255,0.04); }
+    .md-content img { max-width: 100%; border-radius: 8px; margin: 4px 0; }
+
+    /* 行内代码 */
+    .md-content :not(pre) > code {
+      background: rgba(255,255,255,0.08); padding: 2px 5px; border-radius: 4px;
+      font-family: 'SF Mono', Menlo, monospace; font-size: 0.9em;
     }
 
-    .thinking-dots::after {
-      content: '';
-      animation: dots 1.2s steps(4, end) infinite;
+    /* 代码块 */
+    .code-block-wrap {
+      margin: 8px 0; border-radius: 8px; overflow: hidden;
+      background: #1e1e1e; border: 1px solid #333;
     }
-
-    @keyframes dots {
-      0%   { content: ''; }
-      25%  { content: '.'; }
-      50%  { content: '..'; }
-      75%  { content: '...'; }
-      100% { content: ''; }
+    .code-block-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 6px 12px; background: rgba(255,255,255,0.04);
+      font-size: 11px; color: rgba(255,255,255,0.45);
+      font-family: 'SF Mono', Menlo, monospace;
     }
-
-    @keyframes msgIn {
-      from { opacity: 0; transform: translateY(8px); }
-      to   { opacity: 1; transform: translateY(0); }
+    .code-copy-btn {
+      border: none; background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.5);
+      border-radius: 4px; padding: 2px 8px; font-size: 11px; cursor: pointer;
+      transition: background 0.15s, color 0.15s;
     }
+    .code-copy-btn:hover { background: rgba(255,255,255,0.16); color: #fff; }
+    .code-copy-btn.copied { color: #22c55e; }
+    .code-block-wrap pre {
+      margin: 0; padding: 12px; overflow-x: auto;
+      font-family: 'SF Mono', Menlo, monospace; font-size: 13px;
+      line-height: 1.5; tab-size: 2;
+    }
+    .code-block-wrap code { white-space: pre; }
 
     /* ─── 欢迎占位 ─── */
     .welcome {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      color: var(--text-secondary);
-      user-select: none;
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 8px; color: var(--text-secondary); user-select: none;
     }
-
-    .welcome-emoji {
-      font-size: 48px;
-      margin-bottom: 4px;
-      filter: drop-shadow(0 2px 8px rgba(0,0,0,0.2));
-    }
-
-    .welcome-text {
-      font-size: 15px;
-      font-weight: 500;
-      color: var(--text);
-    }
-
-    .welcome-hint {
-      font-size: 12px;
-      color: var(--text-dim);
-    }
+    .welcome-emoji { font-size: 48px; margin-bottom: 4px; }
+    .welcome-text { font-size: 15px; font-weight: 500; color: var(--text); }
+    .welcome-hint { font-size: 12px; color: var(--text-dim); }
 
     /* ─── 输入区域 ─── */
     .input-area {
-      padding: 12px 16px;
-      background: var(--panel-elev-1);
-      border-top: 1px solid var(--border);
-      display: flex;
-      gap: 8px;
-      align-items: flex-end;
-      flex-shrink: 0;
+      padding: 12px 16px; background: var(--panel-elev-1);
+      border-top: 1px solid var(--border); display: flex; gap: 8px;
+      align-items: flex-end; flex-shrink: 0;
     }
-
     .attach-btn {
-      width: 40px;
-      height: 40px;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      background: var(--panel-elev-2);
-      color: var(--text);
-      font-size: 18px;
-      cursor: pointer;
-      transition: background 0.2s, transform 0.08s;
-      flex-shrink: 0;
+      width: 40px; height: 40px; border-radius: 12px;
+      border: 1px solid var(--border); background: var(--panel-elev-2);
+      color: var(--text); font-size: 18px; cursor: pointer;
+      transition: background 0.2s; flex-shrink: 0;
     }
     .attach-btn:hover { background: #28303c; }
-    .attach-btn:active { transform: scale(0.96); }
-
-    .attachments-bar {
-      display: none;
-      padding: 8px 16px 0;
-      gap: 8px;
-      flex-wrap: wrap;
-      background: var(--panel-elev-1);
-    }
+    .attachments-bar { display: none; padding: 8px 16px 0; gap: 8px; flex-wrap: wrap; background: var(--panel-elev-1); }
     .attachments-bar.visible { display: flex; }
-
     .att-chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      border: 1px solid var(--border);
-      background: var(--panel-elev-2);
-      border-radius: 10px;
-      padding: 4px 8px;
-      font-size: 11px;
-      color: var(--text);
-      max-width: 240px;
+      display: inline-flex; align-items: center; gap: 6px;
+      border: 1px solid var(--border); background: var(--panel-elev-2);
+      border-radius: 10px; padding: 4px 8px; font-size: 11px; color: var(--text);
     }
-    .att-chip-name {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .att-chip-remove {
-      border: none;
-      background: transparent;
-      color: var(--text-secondary);
-      cursor: pointer;
-      font-size: 12px;
-    }
-
-    .msg-attachments {
-      margin-top: 8px;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
+    .att-chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+    .att-chip-remove { border: none; background: transparent; color: var(--text-secondary); cursor: pointer; font-size: 12px; }
+    .msg-attachments { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
     .msg-attachment {
-      border: 1px solid var(--glass-border);
-      background: rgba(255, 255, 255, 0.08);
-      border-radius: 10px;
-      padding: 6px 8px;
-      font-size: 12px;
-      color: var(--text);
+      border: 1px solid var(--border); background: rgba(255,255,255,0.05);
+      border-radius: 10px; padding: 6px 8px; font-size: 12px; color: var(--text);
     }
-    .msg-attachment img {
-      max-width: 220px;
-      max-height: 160px;
-      border-radius: 8px;
-      display: block;
-      margin-top: 6px;
-    }
+    .msg-attachment img { max-width: 220px; max-height: 160px; border-radius: 8px; display: block; margin-top: 6px; }
 
     .input-area textarea {
-      flex: 1;
-      padding: 10px 14px;
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      font-size: 14px;
-      font-family: inherit;
-      outline: none;
-      background: var(--panel-elev-2);
-      color: var(--text);
-      resize: none;
-      min-height: 40px;
-      max-height: 120px;
-      line-height: 1.5;
-      transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+      flex: 1; padding: 10px 14px; border: 1px solid var(--border);
+      border-radius: 14px; font-size: 14px; font-family: inherit;
+      outline: none; background: var(--panel-elev-2); color: var(--text);
+      resize: none; min-height: 40px; max-height: 120px; line-height: 1.5;
+      transition: border-color 0.2s, box-shadow 0.2s;
     }
-
-    .input-area textarea:focus {
-      border-color: #3f67d9;
-      background: #232a36;
-      box-shadow: 0 0 0 2px rgba(79, 124, 255, 0.22);
-    }
-
-    .input-area textarea::placeholder {
-      color: var(--text-dim);
-    }
+    .input-area textarea:focus { border-color: #3f67d9; background: #232a36; box-shadow: 0 0 0 2px rgba(79,124,255,0.22); }
+    .input-area textarea::placeholder { color: var(--text-dim); }
 
     .send-btn {
-      padding: 10px 20px;
-      background: var(--primary);
-      color: #fff;
-      border: 1px solid #3d62cd;
-      border-radius: 14px;
-      font-size: 14px;
-      cursor: pointer;
-      font-weight: 600;
-      white-space: nowrap;
-      transition: background 0.2s, transform 0.08s;
-      height: 40px;
+      padding: 10px 20px; background: var(--primary); color: #fff;
+      border: 1px solid #3d62cd; border-radius: 14px; font-size: 14px;
+      cursor: pointer; font-weight: 600; white-space: nowrap;
+      transition: background 0.2s, transform 0.08s; height: 40px;
     }
+    .send-btn:hover { background: var(--primary-hover); }
+    .send-btn:active { transform: scale(0.96); }
+    .send-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    .send-btn:hover {
-      background: var(--primary-hover);
-    }
-
-    .send-btn:active {
-      transform: scale(0.96);
-    }
-
-    .send-btn:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-
-    /* ─── 快捷键提示 ─── */
     .shortcut-hint {
-      font-size: 11px;
-      color: var(--text-dim);
-      text-align: center;
-      padding: 4px 0 8px;
-      background: transparent;
-      user-select: none;
+      font-size: 11px; color: var(--text-dim); text-align: center;
+      padding: 4px 0 8px; user-select: none;
     }
-
     kbd {
-      background: #232a36;
-      border: 1px solid #313846;
-      border-radius: 4px;
-      padding: 1px 5px;
-      font-size: 10px;
-      font-family: inherit;
-      color: var(--text-secondary);
+      background: #232a36; border: 1px solid #313846; border-radius: 4px;
+      padding: 1px 5px; font-size: 10px; font-family: inherit; color: var(--text-secondary);
     }
-
-    /* ─── 富文本：URL 链接 ─── */
-    .rich-link {
-      color: #60a5fa;
-      text-decoration: underline;
-      text-underline-offset: 2px;
-      word-break: break-all;
-      cursor: pointer;
-      transition: color 0.15s;
-    }
-    .rich-link:hover { color: #93c5fd; }
-
-    /* ─── 富文本：本地文件路径 ─── */
-    .rich-path {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      background: rgba(99,102,241,0.12);
-      border: 1px solid rgba(99,102,241,0.25);
-      border-radius: 6px;
-      padding: 2px 8px 2px 6px;
-      font-size: 12px;
-      font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
-      color: #a5b4fc;
-      cursor: pointer;
-      transition: background 0.15s, border-color 0.15s;
-      word-break: break-all;
-    }
-    .rich-path:hover {
-      background: rgba(99,102,241,0.22);
-      border-color: rgba(99,102,241,0.5);
-      color: #c7d2fe;
-    }
-    .rich-path-icon { font-style: normal; flex-shrink: 0; }
-    .rich-path-text { word-break: break-all; }
   </style>
 </head>
 <body>
   <div class="container">
-    <!-- 自绘标题栏 -->
     <div class="titlebar">
-      <span class="titlebar-title"><img src="sprites/qc-icon.png" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:6px;"> 对话终端<span class="titlebar-subtitle">Cmd+U 唤起</span></span>
+      <span class="titlebar-title"><img src="sprites/qc-icon.png" style="width:22px;height:22px;vertical-align:middle;margin-right:4px;border-radius:6px;"> 对话<span class="titlebar-subtitle">Cmd+U 唤起</span></span>
       <button class="titlebar-btn" id="btn-clear" title="清空对话">🗑</button>
     </div>
 
-    <!-- 消息列表 -->
     <div class="messages" id="messages">
       <div class="welcome" id="welcome">
         <div class="welcome-emoji">🐧</div>
@@ -444,7 +352,6 @@
 
     <div class="attachments-bar" id="attachments-bar"></div>
 
-    <!-- 输入区域 -->
     <div class="input-area">
       <button class="attach-btn" id="attach-btn" title="添加本地附件">📎</button>
       <textarea id="input" placeholder="跟企鹅说点什么..." rows="1" autofocus></textarea>
@@ -454,6 +361,118 @@
   </div>
 
   <script>
+    // ═══════════════════════════════════════════
+    //  Markdown 渲染引擎
+    // ═══════════════════════════════════════════
+
+    // 配置 marked
+    const markedRenderer = new marked.Renderer();
+    markedRenderer.code = function({ text, lang }) {
+      const language = (lang || '').trim().toLowerCase();
+      let highlighted;
+      try {
+        if (language && hljs.getLanguage(language)) {
+          highlighted = hljs.highlight(text, { language }).value;
+        } else {
+          highlighted = hljs.highlightAuto(text).value;
+        }
+      } catch { highlighted = escapeHtml(text); }
+      const langLabel = language || 'code';
+      return `<div class="code-block-wrap"><div class="code-block-header"><span>${escapeHtml(langLabel)}</span><button class="code-copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs">${highlighted}</code></pre></div>`;
+    };
+    markedRenderer.html = function({ text }) { return escapeHtml(text); };
+
+    marked.setOptions({ gfm: true, breaks: true, renderer: markedRenderer });
+
+    // DOMPurify 配置
+    const PURIFY_CONFIG = {
+      ALLOWED_TAGS: ['a','b','blockquote','br','code','del','div','em','h1','h2','h3','h4','hr','i','li','ol','p','pre','span','strong','table','tbody','td','th','thead','tr','ul','img','button'],
+      ALLOWED_ATTR: ['class','href','rel','target','title','start','src','alt','onclick','style'],
+      ADD_DATA_URI_TAGS: ['img'],
+    };
+    DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+      if (node instanceof HTMLAnchorElement) {
+        node.setAttribute('rel', 'noreferrer noopener');
+        node.setAttribute('target', '_blank');
+        // 拦截链接点击，用系统浏览器打开
+        node.addEventListener('click', (e) => {
+          e.preventDefault();
+          const href = node.getAttribute('href');
+          if (href && window.quickChatAPI?.openUrl) window.quickChatAPI.openUrl(href);
+        });
+      }
+    });
+
+    function renderMarkdown(text) {
+      if (!text || !text.trim()) return '';
+      const html = marked.parse(text);
+      return DOMPurify.sanitize(html, PURIFY_CONFIG);
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // 代码块复制按钮
+    window.copyCode = function(btn) {
+      const code = btn.closest('.code-block-wrap')?.querySelector('code');
+      if (!code) return;
+      navigator.clipboard.writeText(code.textContent).then(() => {
+        btn.textContent = '已复制 ✓';
+        btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = '复制'; btn.classList.remove('copied'); }, 1500);
+      }).catch(() => {});
+    };
+
+    // ═══════════════════════════════════════════
+    //  AI 输出处理管线
+    // ═══════════════════════════════════════════
+
+    // 清理模型原始标签
+    function cleanModelOutput(text) {
+      if (!text) return '';
+      let c = text;
+      c = c.replace(/<\|tool_calls_section_begin\|>[\s\S]*?<\|tool_calls_section_end\|>/g, '');
+      c = c.replace(/<\|(?:tool_calls_section_begin|tool_calls_section_end|tool_call_begin|tool_call_end|tool_sep|im_end|im_start|endoftext|pad)\|>/g, '');
+      c = c.replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '');
+      c = c.replace(/\{"(?:name|function|tool_calls)":\s*"[^"]*",\s*"arguments":\s*(?:\{[^}]*\}|"[^"]*")\s*\}/g, '');
+      c = c.replace(/#soul-update:.*$/m, '');
+      c = c.replace(/\n{3,}/g, '\n\n');
+      return c.trim();
+    }
+
+    // 提取 <think> 内容
+    function extractThinking(text) {
+      if (!text) return { thinking: null, cleaned: text };
+      const thinkMatches = [];
+      const re = /<\s*think(?:ing)?\s*>([\s\S]*?)<\s*\/\s*think(?:ing)?\s*>/gi;
+      let m;
+      while ((m = re.exec(text)) !== null) {
+        if (m[1]?.trim()) thinkMatches.push(m[1].trim());
+      }
+      const cleaned = text.replace(/<\s*think(?:ing)?\s*>[\s\S]*?<\s*\/\s*think(?:ing)?\s*>/gi, '').trim();
+      return {
+        thinking: thinkMatches.length > 0 ? thinkMatches.join('\n\n') : null,
+        cleaned,
+      };
+    }
+
+    // 完整处理 AI 输出
+    function processAIOutput(rawText) {
+      if (!rawText) return { html: '', thinking: null };
+      // 过滤 NO_REPLY
+      if (rawText.trim() === 'NO_REPLY') return { html: '', thinking: null, noReply: true };
+
+      let text = cleanModelOutput(rawText);
+      const { thinking, cleaned } = extractThinking(text);
+      const mdHtml = renderMarkdown(cleaned);
+      return { html: mdHtml, thinking };
+    }
+
+    // ═══════════════════════════════════════════
+    //  DOM 操作
+    // ═══════════════════════════════════════════
+
     const messagesEl = document.getElementById('messages');
     const welcomeEl = document.getElementById('welcome');
     const inputEl = document.getElementById('input');
@@ -467,103 +486,14 @@
     let pendingAttachments = [];
     let imeComposing = false;
 
-    // ─── 自动调整输入框高度 ───
     inputEl.addEventListener('input', () => {
       inputEl.style.height = 'auto';
       inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
     });
+    inputEl.addEventListener('compositionstart', () => { imeComposing = true; });
+    inputEl.addEventListener('compositionend', () => { imeComposing = false; });
 
-    // ─── 输入法组合态（中文/日文等） ───
-    inputEl.addEventListener('compositionstart', () => {
-      imeComposing = true;
-    });
-    inputEl.addEventListener('compositionend', () => {
-      imeComposing = false;
-    });
-
-    // ─── 发送消息 ───
-    function doSend() {
-      const text = inputEl.value.trim();
-      if ((!text && pendingAttachments.length === 0) || isWaiting) return;
-
-      if (welcomeEl) welcomeEl.style.display = 'none';
-      appendMessage('user', text || '[发送了附件]', pendingAttachments);
-      window.quickChatAPI.sendMessage(text || '[附件消息]', pendingAttachments);
-      inputEl.value = '';
-      inputEl.style.height = 'auto';
-      pendingAttachments = [];
-      renderAttachmentsBar();
-      showThinking();
-      isWaiting = true;
-      sendBtn.disabled = true;
-    }
-
-    // ─── 追加消息 ───
-    // ─── 富文本渲染（仅用于 AI 消息） ───
-    // 识别：URL、绝对文件路径（/...  ~/...）、相对路径（./...）
-    function renderRichText(text) {
-      const fragment = document.createDocumentFragment();
-
-      // 正则：先匹配 URL，再匹配文件路径，其余为普通文本
-      // URL：只允许 ASCII 可打印字符（排除空白、中文、常见结束标点）
-      // 路径：/... 或 ~/... 或 ./...，只含 ASCII 路径字符
-      const pattern = /(<https?:\/\/[^\s\u4e00-\u9fff\uff00-\uffef>]+>|https?:\/\/[^\s\u4e00-\u9fff\uff00-\uffef<>"')\].,，。！？；：""'']+(?:[.,](?=[^\s\u4e00-\u9fff\uff00-\uffef)])|(?=[^\s\u4e00-\u9fff\uff00-\uffef)]))*|(?:~\/|\/)[A-Za-z0-9_\-\.\/]+)/g;
-
-      let last = 0;
-      let match;
-      while ((match = pattern.exec(text)) !== null) {
-        // 普通文本段
-        if (match.index > last) {
-          fragment.appendChild(document.createTextNode(text.slice(last, match.index)));
-        }
-
-        const raw = match[0];
-        // 去掉 Markdown 尖括号包裹 <url>
-        const clean = raw.replace(/^<|>$/g, '');
-
-        if (/^https?:\/\//i.test(clean)) {
-          // ── URL → 蓝色可点链接 ──
-          const a = document.createElement('a');
-          a.href = '#';
-          a.textContent = clean;
-          a.className = 'rich-link';
-          a.title = '点击在浏览器中打开';
-          a.addEventListener('click', (e) => {
-            e.preventDefault();
-            window.quickChatAPI?.openUrl(clean);
-          });
-          fragment.appendChild(a);
-        } else {
-          // ── 文件路径 → 文件卡片 ──
-          const pill = document.createElement('span');
-          pill.className = 'rich-path';
-          pill.title = '点击用系统打开';
-          pill.innerHTML = `<span class="rich-path-icon">📁</span><span class="rich-path-text">${escapeForDisplay(clean)}</span>`;
-          pill.addEventListener('click', () => {
-            window.quickChatAPI?.openLocalPath(clean);
-          });
-          fragment.appendChild(pill);
-        }
-
-        last = match.index + raw.length;
-      }
-
-      // 剩余文本
-      if (last < text.length) {
-        fragment.appendChild(document.createTextNode(text.slice(last)));
-      }
-
-      return fragment;
-    }
-
-    function escapeForDisplay(str) {
-      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    }
-
-    function appendMessage(role, text, attachments = []) {
-      const msg = document.createElement('div');
-      msg.className = `msg ${role}`;
-
+    function createAvatarEl(role) {
       const avatar = document.createElement('div');
       avatar.className = 'msg-avatar';
       if (role === 'ai') {
@@ -574,17 +504,93 @@
       } else {
         avatar.textContent = '👤';
       }
+      return avatar;
+    }
+
+    function createCopyBtn(getText) {
+      const btn = document.createElement('button');
+      btn.className = 'msg-copy-btn';
+      btn.title = '复制';
+      btn.textContent = '⎘';
+      btn.addEventListener('click', () => {
+        const text = getText();
+        navigator.clipboard.writeText(text).then(() => {
+          btn.textContent = '✓';
+          btn.classList.add('copied');
+          setTimeout(() => { btn.textContent = '⎘'; btn.classList.remove('copied'); }, 1500);
+        }).catch(() => {});
+      });
+      return btn;
+    }
+
+    function createThinkBlock(thinkContent) {
+      const block = document.createElement('div');
+      block.className = 'think-block';
+      const header = document.createElement('button');
+      header.className = 'think-header';
+      header.innerHTML = '<span class="think-arrow">▸</span> <span>🧠 思考过程</span>';
+      header.addEventListener('click', () => block.classList.toggle('open'));
+      const content = document.createElement('div');
+      content.className = 'think-content md-content';
+      content.innerHTML = renderMarkdown(thinkContent);
+      block.appendChild(header);
+      block.appendChild(content);
+      return block;
+    }
+
+    function createToolCard(name, detail, output) {
+      const card = document.createElement('div');
+      card.className = 'tool-card' + (output ? ' expandable' : '');
+      const header = document.createElement('div');
+      header.className = 'tool-card-header';
+      const title = document.createElement('div');
+      title.className = 'tool-card-title';
+      title.innerHTML = `<span class="tool-card-icon">⚙</span> <span>${escapeHtml(name)}</span>`;
+      const status = document.createElement('span');
+      status.className = 'tool-card-status';
+      status.textContent = '✓';
+      header.appendChild(title);
+      header.appendChild(status);
+      card.appendChild(header);
+      if (detail) {
+        const detailEl = document.createElement('div');
+        detailEl.className = 'tool-card-detail';
+        detailEl.textContent = detail.length > 120 ? detail.slice(0, 120) + '…' : detail;
+        card.appendChild(detailEl);
+      }
+      if (output) {
+        const outputEl = document.createElement('div');
+        outputEl.className = 'tool-card-output';
+        outputEl.textContent = output.length > 400 ? output.slice(0, 400) + '…' : output;
+        card.appendChild(outputEl);
+        card.addEventListener('click', () => card.classList.toggle('expanded'));
+      }
+      return card;
+    }
+
+    function createAgentStatus(text) {
+      const el = document.createElement('div');
+      el.className = 'agent-status';
+      el.innerHTML = `<div class="agent-status-spinner"></div> <span>${escapeHtml(text)}</span>`;
+      return el;
+    }
+
+    // ─── 追加消息 ───
+    function appendMessage(role, text, attachments = []) {
+      const msg = document.createElement('div');
+      msg.className = `msg ${role}`;
+      msg.appendChild(createAvatarEl(role));
 
       const bubble = document.createElement('div');
       bubble.className = 'msg-bubble';
 
       if (role === 'ai') {
-        // AI 消息：富文本渲染（链接 + 路径可点击）
-        bubble.appendChild(renderRichText(text));
+        renderAIBubble(bubble, text);
       } else {
         bubble.textContent = text;
       }
 
+      // 附件
       if (attachments.length > 0) {
         const attWrap = document.createElement('div');
         attWrap.className = 'msg-attachments';
@@ -602,82 +608,123 @@
         bubble.appendChild(attWrap);
       }
 
-      msg.appendChild(avatar);
       msg.appendChild(bubble);
       messagesEl.appendChild(msg);
       scrollToBottom();
     }
 
+    // AI 气泡渲染（完整管线）
+    let lastRawText = '';  // 用于复制按钮
+    function renderAIBubble(bubble, rawText) {
+      lastRawText = rawText;
+      const result = processAIOutput(rawText);
+      if (result.noReply) return;
+
+      // Think 折叠
+      if (result.thinking) {
+        bubble.appendChild(createThinkBlock(result.thinking));
+      }
+
+      // Markdown 正文
+      if (result.html) {
+        const mdDiv = document.createElement('div');
+        mdDiv.className = 'md-content';
+        mdDiv.innerHTML = result.html;
+        bubble.appendChild(mdDiv);
+      }
+
+      // 复制按钮
+      bubble.appendChild(createCopyBtn(() => lastRawText));
+    }
+
+    // ─── 发送消息 ───
+    function doSend() {
+      const text = inputEl.value.trim();
+      if ((!text && pendingAttachments.length === 0) || isWaiting) return;
+      if (welcomeEl) welcomeEl.style.display = 'none';
+      appendMessage('user', text || '[发送了附件]', pendingAttachments);
+      inputEl.value = '';
+      inputEl.style.height = 'auto';
+      pendingAttachments = [];
+      renderAttachmentsBar();
+      showThinkingAnim();
+      isWaiting = true;
+      sendBtn.disabled = true;
+
+      // 优先走 Gateway RPC chat.send（完整 Agent loop）
+      if (window.quickChatAPI.gatewayChatSend) {
+        window.quickChatAPI.gatewayChatSend(text || '[附件消息]')
+          .then((result) => {
+            if (result && result.success) {
+              console.log('[quick-chat] chat.send accepted via RPC');
+              // 流式回复和工具进度通过 Gateway 事件自动推送
+            } else {
+              console.warn('[quick-chat] RPC 失败，回退旧路径:', result && result.error);
+              window.quickChatAPI.sendMessage(text || '[附件消息]', []);
+            }
+          })
+          .catch((err) => {
+            console.warn('[quick-chat] RPC 异常，回退旧路径:', err);
+            window.quickChatAPI.sendMessage(text || '[附件消息]', []);
+          });
+      } else {
+        // 旧路径：通过主窗口中转
+        window.quickChatAPI.sendMessage(text || '[附件消息]', []);
+      }
+    }
+
     // ─── 思考动画 ───
-    function showThinking() {
+    function showThinkingAnim() {
       const msg = document.createElement('div');
       msg.className = 'msg ai';
       msg.id = 'thinking-msg';
-
-      const avatar = document.createElement('div');
-      avatar.className = 'msg-avatar';
-      const avatarImg = document.createElement('img');
-      avatarImg.src = 'sprites/qc-icon.png';
-      avatarImg.alt = '🐧';
-      avatar.appendChild(avatarImg);
-
+      msg.appendChild(createAvatarEl('ai'));
       const bubble = document.createElement('div');
       bubble.className = 'msg-bubble thinking';
       bubble.innerHTML = '<span class="thinking-dots">思考中</span>';
-
-      msg.appendChild(avatar);
       msg.appendChild(bubble);
       messagesEl.appendChild(msg);
       thinkingEl = msg;
       scrollToBottom();
     }
 
-    function hideThinking() {
-      if (thinkingEl) {
-        thinkingEl.remove();
-        thinkingEl = null;
-      }
+    function hideThinkingAnim() {
+      if (thinkingEl) { thinkingEl.remove(); thinkingEl = null; }
     }
 
-    // ─── 接收 AI 流式 chunk（逐 token 实时显示） ───
+    // ─── 流式输出 ───
     let streamingMsgEl = null;
     let streamingBubbleEl = null;
+    let streamingRawText = '';
 
-    if (window.quickChatAPI && window.quickChatAPI.onAIStreamChunk) {
+    if (window.quickChatAPI?.onAIStreamChunk) {
       window.quickChatAPI.onAIStreamChunk((text) => {
         if (!text || !text.trim()) return;
-
-        // 如果还有思考动画，替换为流式气泡
-        if (thinkingEl) {
-          hideThinking();
-        }
+        if (thinkingEl) hideThinkingAnim();
+        streamingRawText = text;
 
         if (streamingMsgEl && streamingBubbleEl) {
           // 更新现有流式气泡
-          // 清空后重新用富文本渲染
           streamingBubbleEl.innerHTML = '';
-          streamingBubbleEl.appendChild(renderRichText(text));
+          renderAIBubble(streamingBubbleEl, text);
+          // 添加流式光标
+          const cursor = document.createElement('span');
+          cursor.className = 'streaming-cursor';
+          streamingBubbleEl.appendChild(cursor);
           scrollToBottom();
         } else {
-          // 首次创建流式气泡
+          // 首次创建
           const msg = document.createElement('div');
           msg.className = 'msg ai';
-
-          const avatar = document.createElement('div');
-          avatar.className = 'msg-avatar';
-          const avatarImg = document.createElement('img');
-          avatarImg.src = 'sprites/qc-icon.png';
-          avatarImg.alt = '🐧';
-          avatar.appendChild(avatarImg);
-
+          msg.appendChild(createAvatarEl('ai'));
           const bubble = document.createElement('div');
           bubble.className = 'msg-bubble';
-          bubble.appendChild(renderRichText(text));
-
-          msg.appendChild(avatar);
+          renderAIBubble(bubble, text);
+          const cursor = document.createElement('span');
+          cursor.className = 'streaming-cursor';
+          bubble.appendChild(cursor);
           msg.appendChild(bubble);
           messagesEl.appendChild(msg);
-
           streamingMsgEl = msg;
           streamingBubbleEl = bubble;
           scrollToBottom();
@@ -685,19 +732,30 @@
       });
     }
 
-    // ─── 接收 AI 回复 ───
-    if (window.quickChatAPI && window.quickChatAPI.onAIReply) {
+    // ─── 接收 AI 最终回复 ───
+    if (window.quickChatAPI?.onAIReply) {
       window.quickChatAPI.onAIReply((text) => {
-        hideThinking();
+        hideThinkingAnim();
+
+        // 过滤 NO_REPLY
+        if (text?.trim() === 'NO_REPLY') {
+          if (streamingMsgEl) { streamingMsgEl.remove(); }
+          streamingMsgEl = null;
+          streamingBubbleEl = null;
+          streamingRawText = '';
+          isWaiting = false;
+          sendBtn.disabled = false;
+          return;
+        }
 
         if (streamingMsgEl && streamingBubbleEl) {
           // 流式气泡已存在 → 更新为最终文本
           streamingBubbleEl.innerHTML = '';
-          streamingBubbleEl.appendChild(renderRichText(text));
+          renderAIBubble(streamingBubbleEl, text);
           streamingMsgEl = null;
           streamingBubbleEl = null;
+          streamingRawText = '';
         } else {
-          // 非流式 → 直接添加
           appendMessage('ai', text);
         }
 
@@ -707,117 +765,330 @@
       });
     }
 
-    // ─── 接收来自主窗口的用户消息（skill 配置触发、语音识别等） ───
-    if (window.quickChatAPI && window.quickChatAPI.onUserMsg) {
+    // ─── 接收来自主窗口的用户消息 ───
+    if (window.quickChatAPI?.onUserMsg) {
       window.quickChatAPI.onUserMsg((text) => {
         if (welcomeEl) welcomeEl.style.display = 'none';
         appendMessage('user', text);
-        showThinking();
+        showThinkingAnim();
         isWaiting = true;
         sendBtn.disabled = true;
       });
     }
 
-    // ─── 滚动到底部 ───
-    function scrollToBottom() {
-      requestAnimationFrame(() => {
-        messagesEl.scrollTop = messagesEl.scrollHeight;
+    // ─── Agent 工具进度（通过 IPC 接收） ───
+    const TOOL_ICONS = {
+      read: '📖', write: '💾', edit: '✏️', apply_patch: '🩹',
+      exec: '▶️', process: '⚙', grep: '🔍', find: '🔎', ls: '📁',
+      cron: '⏰', message: '💬', canvas: '🎨', image: '🖼️', pdf: '📄',
+      memory_search: '🧠', memory_get: '🧠',
+      web_search: '🌐', fetch_page: '🌐', web_screenshot: '📸',
+      text_to_speech: '🔊', think: '💭',
+      session_status: '📊', sessions_list: '📋', sessions_send: '📤',
+      sessions_spawn: '🔀', agents_list: '🤖', subagents: '🤖',
+      gateway: '🔧', nodes: '📡',
+    };
+    const TOOL_LABELS = {
+      read: '读取文件', write: '写入文件', edit: '编辑文件', apply_patch: '应用补丁',
+      exec: '执行命令', process: '管理进程', grep: '搜索内容', find: '查找文件', ls: '列出目录',
+      cron: '定时任务', message: '发送消息', canvas: '画布操作', image: '图片分析', pdf: 'PDF 处理',
+      memory_search: '搜索记忆', memory_get: '获取记忆',
+      web_search: '搜索网页', fetch_page: '抓取网页', web_screenshot: '网页截图',
+      text_to_speech: '语音合成', think: '思考中',
+      session_status: '会话状态', sessions_list: '会话列表', sessions_send: '发送消息',
+      sessions_spawn: '创建子会话', agents_list: 'Agent 列表', subagents: '子 Agent',
+      gateway: '网关管理', nodes: '设备控制',
+    };
+
+    // 活跃的工具卡片（按 toolCallId 或 name 索引）
+    const activeToolCards = new Map();
+
+    // ─── 旧路径：Agent 工具进度（通过主窗口中转） ───
+    if (window.quickChatAPI?.onToolProgress) {
+      window.quickChatAPI.onToolProgress((evt) => {
+        handleToolEvent(evt);
       });
     }
 
-    // ─── 清空对话 ───
+    // ─── Gateway RPC 事件：chat（流式文本） ───
+    if (window.quickChatAPI?.onGatewayChatEvent) {
+      window.quickChatAPI.onGatewayChatEvent((payload) => {
+        if (!payload) return;
+
+        if (payload.state === 'delta') {
+          // 流式文本——轻量渲染（不走 cleanModelOutput，避免中间状态被误清）
+          const text = extractGatewayText(payload.message);
+          if (text !== null && text.trim()) {
+            if (thinkingEl) hideThinkingAnim();
+            streamingRawText = text;
+            // 轻量渲染：直接用 marked 渲染 Markdown，不做 cleanModelOutput
+            const lightHtml = typeof marked !== 'undefined' ? DOMPurify.sanitize(marked.parse(text)) : escapeHtml(text);
+            if (streamingMsgEl && streamingBubbleEl) {
+              streamingBubbleEl.innerHTML = `<div class="md-content">${lightHtml}</div>`;
+              scrollToBottom();
+            } else {
+              const msg = document.createElement('div');
+              msg.className = 'msg ai';
+              msg.appendChild(createAvatarEl('ai'));
+              const bubble = document.createElement('div');
+              bubble.className = 'msg-bubble';
+              bubble.innerHTML = `<div class="md-content">${lightHtml}</div>`;
+              msg.appendChild(bubble);
+              messagesEl.appendChild(msg);
+              streamingMsgEl = msg;
+              streamingBubbleEl = bubble;
+              scrollToBottom();
+            }
+          }
+        } else if (payload.state === 'final') {
+          hideThinkingAnim();
+          const finalText = extractGatewayText(payload.message);
+          console.log('[quick-chat] final event:', { finalTextLen: finalText?.length, streamingRawTextLen: streamingRawText?.length, hasStreamingEl: !!streamingMsgEl, finalTextPreview: (finalText || '').substring(0, 100) });
+          
+          // final 只在有实质新内容时才创建/更新气泡
+          const hasMeaningfulFinal = finalText && finalText.trim().length > 0;
+          if (hasMeaningfulFinal) {
+            if (streamingMsgEl && streamingBubbleEl) {
+              // 流式气泡还在 → 更新为 final（final 是最终完整版）
+              streamingBubbleEl.innerHTML = '';
+              renderAIBubble(streamingBubbleEl, finalText);
+            } else {
+              // 没有流式气泡（可能被 tool_start 定型了）→ 创建新气泡
+              appendMessage('ai', finalText);
+            }
+          }
+          // 如果 final 没有文本，已有气泡保持不动（不清空）
+          streamingMsgEl = null;
+          streamingBubbleEl = null;
+          streamingRawText = '';
+          // 标记所有工具卡片完成
+          activeToolCards.forEach((card) => { if (!card.dataset.done) markToolCardDone(card); });
+          activeToolCards.clear();
+          isWaiting = false;
+          sendBtn.disabled = false;
+          inputEl.focus();
+        } else if (payload.state === 'aborted' || payload.state === 'error') {
+          hideThinkingAnim();
+          if (payload.state === 'error') {
+            appendMessage('ai', `⚠️ ${payload.errorMessage || '处理出错'}`);
+          }
+          streamingMsgEl = null;
+          streamingBubbleEl = null;
+          streamingRawText = '';
+          activeToolCards.forEach((card) => { if (!card.dataset.done) markToolCardDone(card); });
+          activeToolCards.clear();
+          isWaiting = false;
+          sendBtn.disabled = false;
+        }
+      });
+    }
+
+    // ─── Gateway RPC 事件：agent（工具调用进度） ───
+    if (window.quickChatAPI?.onGatewayAgentEvent) {
+      window.quickChatAPI.onGatewayAgentEvent((payload) => {
+        if (!payload) return;
+        const stream = payload.stream;
+        const data = payload.data || {};
+
+        if (stream === 'tool') {
+          if (data.phase === 'start') {
+            handleToolEvent({ type: 'tool_start', phase: 'start', name: data.name || 'tool', toolCallId: data.toolCallId || '', args: data.args });
+          } else if (data.phase === 'result') {
+            handleToolEvent({ type: 'tool_end', phase: 'result', name: data.name || 'tool', toolCallId: data.toolCallId || '' });
+          }
+        } else if (stream === 'lifecycle') {
+          if (data.phase === 'end') {
+            // Agent 执行完成：标记所有卡片完成
+            activeToolCards.forEach((card) => { if (!card.dataset.done) markToolCardDone(card); });
+            activeToolCards.clear();
+          }
+        }
+      });
+    }
+
+    // ─── 统一工具事件处理 ───
+    function handleToolEvent(evt) {
+      if (!evt) return;
+
+      if (evt.type === 'tool_start' || evt.phase === 'start') {
+        if (thinkingEl) hideThinkingAnim();
+        // 定型当前流式气泡（如果有），后续 delta 会创建新气泡
+        if (streamingMsgEl) {
+          streamingMsgEl = null;
+          streamingBubbleEl = null;
+          streamingRawText = '';
+        }
+        const name = evt.name || 'tool';
+        const icon = TOOL_ICONS[name] || '🔧';
+        const label = TOOL_LABELS[name] || name;
+        const card = createLiveToolCard(icon, label, name);
+        const key = evt.toolCallId || `${name}-${Date.now()}`;
+        activeToolCards.set(key, card);
+        if (streamingMsgEl && streamingMsgEl.parentNode) {
+          messagesEl.insertBefore(card, streamingMsgEl);
+        } else {
+          messagesEl.appendChild(card);
+        }
+        scrollToBottom();
+        return;
+      }
+
+      if (evt.type === 'tool_end') {
+        const name = evt.name || 'tool';
+        let found = false;
+        activeToolCards.forEach((card, key) => {
+          if (!found && (key.startsWith(name) || card.dataset.toolName === name) && !card.dataset.done) {
+            markToolCardDone(card);
+            found = true;
+          }
+        });
+        return;
+      }
+
+      if (evt.type === 'agent_end') {
+        activeToolCards.forEach((card) => { if (!card.dataset.done) markToolCardDone(card); });
+        activeToolCards.clear();
+      }
+    }
+
+    function extractGatewayText(message) {
+      if (!message) return null;
+      const content = message.content;
+      if (typeof content === 'string') return content;
+      if (Array.isArray(content)) {
+        const parts = content.filter(p => p && p.type === 'text' && typeof p.text === 'string').map(p => p.text);
+        return parts.length > 0 ? parts.join('\n') : null;
+      }
+      if (typeof message.text === 'string') return message.text;
+      return null;
+    }
+
+    function createLiveToolCard(icon, label, toolName) {
+      const card = document.createElement('div');
+      card.className = 'tool-card';
+      card.dataset.toolName = toolName;
+      card.innerHTML = `
+        <div class="tool-card-header">
+          <div class="tool-card-title">
+            <span class="tool-card-icon">${icon}</span>
+            <span>${escapeHtml(label)}</span>
+          </div>
+          <div class="tool-card-spinner"></div>
+        </div>
+      `;
+      return card;
+    }
+
+    function markToolCardDone(card) {
+      card.dataset.done = '1';
+      const spinner = card.querySelector('.tool-card-spinner');
+      if (spinner) {
+        spinner.outerHTML = '<span class="tool-card-status">✓</span>';
+      }
+    }
+
+    // ─── 工具函数 ───
+    function scrollToBottom() {
+      requestAnimationFrame(() => { messagesEl.scrollTop = messagesEl.scrollHeight; });
+    }
+
     clearBtn.addEventListener('click', () => {
       messagesEl.innerHTML = '';
       const w = document.createElement('div');
-      w.className = 'welcome';
-      w.id = 'welcome';
+      w.className = 'welcome'; w.id = 'welcome';
       w.innerHTML = '<div class="welcome-emoji">🐧</div><div class="welcome-text">跟企鹅聊聊天吧</div><div class="welcome-hint">输入消息，按 Enter 发送</div>';
       messagesEl.appendChild(w);
-      isWaiting = false;
-      sendBtn.disabled = false;
-      hideThinking();
+      isWaiting = false; sendBtn.disabled = false;
+      hideThinkingAnim();
+      streamingMsgEl = null; streamingBubbleEl = null; streamingRawText = '';
       pendingAttachments = [];
       renderAttachmentsBar();
     });
 
-    // ─── 按键绑定 ───
     sendBtn.addEventListener('click', doSend);
-
     inputEl.addEventListener('keydown', (e) => {
-      // 输入法候选未确认时，Enter 只用于确认上屏，不发送消息
-      if (e.key === 'Enter' && (imeComposing || e.isComposing || e.keyCode === 229)) {
-        return;
-      }
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        doSend();
-      }
-      if (e.key === 'Escape') {
-        window.quickChatAPI.closeWindow();
-      }
+      if (e.key === 'Enter' && (imeComposing || e.isComposing || e.keyCode === 229)) return;
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); }
+      if (e.key === 'Escape') window.quickChatAPI.closeWindow();
     });
 
     attachBtn.addEventListener('click', async () => {
-      if (!window.quickChatAPI || !window.quickChatAPI.pickFiles) return;
+      if (!window.quickChatAPI?.pickFiles) return;
       const result = await window.quickChatAPI.pickFiles();
-      if (!result || !result.ok || !result.files) return;
+      if (!result?.ok || !result.files) return;
       result.files.forEach(addAttachment);
       renderAttachmentsBar();
     });
 
     inputEl.addEventListener('paste', async (e) => {
-      const items = e.clipboardData && e.clipboardData.items ? Array.from(e.clipboardData.items) : [];
-      const hasImage = items.some(it => it.type && it.type.startsWith('image/'));
-      if (!hasImage) return;
+      const items = e.clipboardData?.items ? Array.from(e.clipboardData.items) : [];
+      if (!items.some(it => it.type?.startsWith('image/'))) return;
       e.preventDefault();
-      if (!window.quickChatAPI || !window.quickChatAPI.readClipboardImage) return;
+      if (!window.quickChatAPI?.readClipboardImage) return;
       const res = await window.quickChatAPI.readClipboardImage();
-      if (res && res.ok && res.image) {
-        addAttachment(res.image);
-        renderAttachmentsBar();
-      }
+      if (res?.ok && res.image) { addAttachment(res.image); renderAttachmentsBar(); }
     });
 
     function addAttachment(att) {
-      if (!att || !att.name) return;
-      const dup = pendingAttachments.some(a => a.name === att.name && a.path === att.path);
-      if (!dup) pendingAttachments.push(att);
+      if (!att?.name) return;
+      if (!pendingAttachments.some(a => a.name === att.name && a.path === att.path)) pendingAttachments.push(att);
     }
 
     function renderAttachmentsBar() {
       attachmentsBar.innerHTML = '';
-      if (pendingAttachments.length === 0) {
-        attachmentsBar.classList.remove('visible');
-        return;
-      }
+      if (pendingAttachments.length === 0) { attachmentsBar.classList.remove('visible'); return; }
       pendingAttachments.forEach((att, idx) => {
         const chip = document.createElement('div');
         chip.className = 'att-chip';
-        const icon = document.createElement('span');
-        icon.textContent = att.type === 'image' ? '🖼️' : '📄';
-        const nameEl = document.createElement('span');
-        nameEl.className = 'att-chip-name';
-        nameEl.title = att.path || '';
-        nameEl.textContent = att.name;
-        const removeBtn = document.createElement('button');
-        removeBtn.className = 'att-chip-remove';
-        removeBtn.title = '移除';
-        removeBtn.textContent = '×';
-        removeBtn.addEventListener('click', () => {
-          pendingAttachments.splice(idx, 1);
-          renderAttachmentsBar();
-        });
-        chip.appendChild(icon);
-        chip.appendChild(nameEl);
-        chip.appendChild(removeBtn);
+        chip.innerHTML = `<span>${att.type === 'image' ? '🖼️' : '📄'}</span><span class="att-chip-name" title="${att.path || ''}">${att.name}</span>`;
+        const rm = document.createElement('button');
+        rm.className = 'att-chip-remove'; rm.title = '移除'; rm.textContent = '×';
+        rm.addEventListener('click', () => { pendingAttachments.splice(idx, 1); renderAttachmentsBar(); });
+        chip.appendChild(rm);
         attachmentsBar.appendChild(chip);
       });
       attachmentsBar.classList.add('visible');
     }
 
-    window.addEventListener('focus', () => {
-      setTimeout(() => inputEl.focus(), 50);
-    });
+    window.addEventListener('focus', () => { setTimeout(() => inputEl.focus(), 50); });
+
+    // ─── 打开时从 Gateway 加载聊天历史 ───
+    async function loadChatHistory() {
+      if (!window.quickChatAPI?.gatewayChatSend) return; // 没有 RPC
+      try {
+        const res = await window.quickChatAPI.gatewayChatHistory();
+        if (!res?.success || !res.result?.messages) return;
+        const messages = res.result.messages;
+        if (messages.length === 0) return;
+
+        // 隐藏欢迎页
+        if (welcomeEl) welcomeEl.style.display = 'none';
+
+        // 渲染历史消息
+        for (const msg of messages) {
+          const role = (msg.role || '').toLowerCase();
+          if (role === 'system') continue; // 跳过 system prompt
+          if (role === 'user') {
+            const text = extractGatewayText(msg);
+            if (text && text.trim()) {
+              appendMessage('user', text);
+            }
+          } else if (role === 'assistant') {
+            const text = extractGatewayText(msg);
+            if (text && text.trim()) {
+              appendMessage('ai', text);
+            }
+          }
+          // toolresult 等跳过
+        }
+        scrollToBottom();
+      } catch (err) {
+        console.warn('[quick-chat] 加载历史失败:', err);
+      }
+    }
+
+    // 延迟加载（等 Gateway RPC 就绪）
+    setTimeout(loadChatHistory, 500);
   </script>
 </body>
 </html>

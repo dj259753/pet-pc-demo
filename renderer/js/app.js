@@ -128,6 +128,10 @@
       if (AIBrain.onToolProgress) {
         AIBrain.onToolProgress((evt) => {
           BubbleSystem.showToolProgress(evt);
+          // 同步转发给对话终端窗口
+          if (window.electronAPI && window.electronAPI.sendQuickChatToolProgress) {
+            window.electronAPI.sendQuickChatToolProgress(evt);
+          }
         });
       }
     }

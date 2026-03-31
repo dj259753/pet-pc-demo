@@ -2526,6 +2526,13 @@ ipcMain.on('quick-chat-stream-chunk', (event, { text }) => {
   }
 });
 
+// 主窗口 Agent 工具进度 → 转发给对话终端窗口
+ipcMain.on('quick-chat-tool-progress', (event, evt) => {
+  if (quickChatWindow && !quickChatWindow.isDestroyed()) {
+    quickChatWindow.webContents.send('agent-tool-progress', evt);
+  }
+});
+
 // 主窗口转发用户消息（如语音文本）→ 对话终端窗口显示
 ipcMain.on('quick-chat-user-msg', (event, { text }) => {
   if (quickChatWindow && !quickChatWindow.isDestroyed()) {

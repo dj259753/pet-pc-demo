@@ -16,6 +16,17 @@ contextBridge.exposeInMainWorld('quickChatAPI', {
   // 监听用户消息（从主窗口转发的语音文本等）
   onUserMsg: (callback) => ipcRenderer.on('user-msg', (_, { text }) => callback(text)),
 
+  // 监听 Agent 工具执行进度（tool_start/tool_end/agent_start/agent_end）
+  onToolProgress: (callback) => ipcRenderer.on('agent-tool-progress', (_, evt) => callback(evt)),
+
+  // ─── Gateway RPC（直接走完整 Agent loop） ───
+  gatewayChatSend: (message) => ipcRenderer.invoke('gateway-chat-send', { message }),
+  gatewayChatAbort: () => ipcRenderer.invoke('gateway-chat-abort', {}),
+  gatewayChatHistory: (sessionKey, limit) => ipcRenderer.invoke('gateway-chat-history', { sessionKey, limit }),
+  gatewayRpcStatus: () => ipcRenderer.invoke('gateway-rpc-status'),
+  onGatewayChatEvent: (callback) => ipcRenderer.on('gateway-chat-event', (_, payload) => callback(payload)),
+  onGatewayAgentEvent: (callback) => ipcRenderer.on('gateway-agent-event', (_, payload) => callback(payload)),
+
   // 打开外部 URL（系统浏览器）
   openUrl: (url) => ipcRenderer.invoke('open-external-url', url),
 
