@@ -15,6 +15,8 @@ const SpriteRenderer = (() => {
   let animLocked = false;
   let animOnComplete = null;
   let pollTimer = null;          // 帧轮询定时器
+  let isExiting = false;         // 退出锁：设置后一切动画切换请求均拒绝
+  let _pollSession = 0;          // 播完检测会话 ID，防止多次 playOnce 互相串号
 
   // ─── SWF 清单 ───
   let swfManifest = null;        // 动画名 → SWF 相对路径
@@ -373,9 +375,14 @@ const SpriteRenderer = (() => {
     let prevFrame = -1;
     let stableCount = 0;
     let startTime = Date.now();
+    let hasStartedPlaying = false; // 是否已观测到帧推进（frame > 0）
+
+    // 用 sessionId 防止跨 playOnce 的回调交叉触发
+    const sessionId = ++_pollSession;
 
     pollTimer = setInterval(() => {
       if (!rufflePlayer) { stopPolling(); return; }
+      if (_pollSession !== sessionId) { stopPolling(); return; }
 
       try {
         const current = rufflePlayer.currentFrame;
@@ -387,11 +394,20 @@ const SpriteRenderer = (() => {
           return;
         }
 
-        // 唯一判定：帧号1.5秒不变 = 动画停住了（播完或卡住）
+        // 必须先观测到帧推进，才算动画真正开始
+        if (!hasStartedPlaying) {
+          if (current > 0 && current !== prevFrame) {
+            hasStartedPlaying = true;
+          }
+          prevFrame = current;
+          return;
+        }
+
+        // 帧号5秒不变 = 动画停住了（播完或卡住）
         if (current === prevFrame) {
           stableCount++;
           if (stableCount >= 50) { // 50 * 100ms = 5秒
-            fireComplete(onComplete);
+            fireComplete(onComplete, sessionId);
             return;
           }
         } else {
@@ -403,7 +419,8 @@ const SpriteRenderer = (() => {
     }, 100);
   }
 
-  function fireComplete(onComplete) {
+  function fireComplete(onComplete, sessionId) {
+    if (sessionId !== undefined && _pollSession !== sessionId) return;
     stopPolling();
     animLocked = false;
     if (onComplete) {
@@ -582,15 +599,6 @@ const SpriteRenderer = (() => {
 
   /** 内部动画切换实现 */
   function _doSetAnimation(name) {
-    // ── 每次切换动画时，重置 pet-container 到标准锚点位置 ──
-    // 防止某些动画/CSS效果残留导致位置飘移
-    const _pc = document.getElementById('pet-container');
-    const _isCompact = typeof TaskbarUI !== 'undefined' && TaskbarUI.isCompact;
-    if (_pc && !DragSystem?.isDragging) {
-      _pc.style.left = _isCompact ? '0px' : '80px';
-      _pc.style.top  = _isCompact ? '0px' : '200px';
-    }
-
     // 直接是 QC 动画名
     if (swfManifest?.[name]) {
       currentAnim = name;
