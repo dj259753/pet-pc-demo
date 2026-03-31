@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, dialog, globalShortcut, shell, systemPreferences } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, dialog, globalShortcut, shell, systemPreferences, clipboard } = require('electron');
 const path = require('path');
 const os = require('os');
 const fs = require('fs');
@@ -3883,18 +3883,28 @@ ipcMain.handle('collect-diagnostics', () => {
       }
     } catch {}
 
-    // 最近50行日志
+    // 最近200行日志（含 ERROR/WARN 等级，方便排查问题）
     try {
       const logPath = getLogFilePath();
       if (fs.existsSync(logPath)) {
-        const lines = fs.readFileSync(logPath, 'utf-8').split('\n').slice(-50);
-        diag.push('─── 最近日志(最后50行) ───');
+        const lines = fs.readFileSync(logPath, 'utf-8').split('\n').slice(-200);
+        diag.push('─── 最近日志(最后200行) ───');
         diag.push(lines.join('\n'));
       }
     } catch {}
 
     diag.push('═══════════════════════════════════════');
     return { ok: true, report: diag.join('\n') };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// 主进程写剪贴板（渲染进程 navigator.clipboard 有 focus 限制时备用）
+ipcMain.handle('write-clipboard', (event, text) => {
+  try {
+    clipboard.writeText(String(text || ''));
+    return { ok: true };
   } catch (e) {
     return { ok: false, error: e.message };
   }

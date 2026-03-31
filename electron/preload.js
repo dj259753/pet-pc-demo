@@ -124,6 +124,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   readLogTail:       (opts) => ipcRenderer.invoke('read-log-tail', opts || {}),
   openLogDir:        () => ipcRenderer.invoke('open-log-dir'),
   collectDiagnostics: () => ipcRenderer.invoke('collect-diagnostics'),
+  writeClipboard: (text) => ipcRenderer.invoke('write-clipboard', text),
 
   // ─── 语音识别字幕（屏幕中下方独立窗口） ───
   subtitleShow: (text) => ipcRenderer.send('subtitle-show', { text }),

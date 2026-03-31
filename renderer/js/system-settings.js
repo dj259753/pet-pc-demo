@@ -242,6 +242,10 @@ const SystemSettings = (() => {
           // 请求权限
           if (window.electronAPI?.requestMicPermission) {
             const r = await window.electronAPI.requestMicPermission();
+            // 把最新权限状态同步回 VoiceMode，让 renderAsrStatus 能读到
+            if (typeof VoiceMode !== 'undefined' && r.status) {
+              try { VoiceMode.micPermStatus = r.status; } catch {}
+            }
             if (r.granted) {
               BubbleSystem.show('🎤 麦克风已授权！', 2200);
             } else if (r.needSystemPrefs) {
@@ -266,9 +270,15 @@ const SystemSettings = (() => {
           if (window.electronAPI?.collectDiagnostics) {
             const r = await window.electronAPI.collectDiagnostics();
             if (r.ok) {
-              // 写入剪贴板
-              await navigator.clipboard.writeText(r.report);
+              // 优先用主进程写剪贴板，避免渲染进程 focus 限制
+              if (window.electronAPI?.writeClipboard) {
+                await window.electronAPI.writeClipboard(r.report);
+              } else {
+                await navigator.clipboard.writeText(r.report);
+              }
               BubbleSystem.show('📋 诊断日志已复制到剪贴板！可以直接发给开发者', 4000);
+            } else {
+              BubbleSystem.show('收集失败: ' + (r.error || '未知'), 2600);
             }
           } else if (window.electronAPI?.openLogDir) {
             await window.electronAPI.openLogDir();
