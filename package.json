@@ -1,6 +1,6 @@
 {
   "name": "qq-pet-skills",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "QQ宠物 - 基于 OpenClaw 多Agent架构的桌面宠物",
   "main": "electron/main.js",
   "author": "Jerry",
@@ -22,13 +22,15 @@
         {
           "target": "dmg",
           "arch": [
-            "arm64"
+            "arm64",
+            "x64"
           ]
         },
         {
           "target": "zip",
           "arch": [
-            "arm64"
+            "arm64",
+            "x64"
           ]
         }
       ],
@@ -67,7 +69,11 @@
       "assets/**/*",
       "openclaw-skill/**/*",
       "release/**/*",
-      "package.json"
+      "package.json",
+      "!swf-test",
+      "!test-ruffle.html",
+      "!tools",
+      "!scripts"
     ],
     "extraResources": [
       {
