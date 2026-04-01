@@ -289,6 +289,13 @@ function createMainWindow() {
     startSystemSensors();
   });
 
+  // 窗口失焦（点击其他应用/屏幕空白处）→ 通知渲染端关闭菜单
+  mainWindow.on('blur', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('main-window-blur');
+    }
+  });
+
   // 启用点击穿透（forward 模式），渲染进程通过鼠标位置决定是否拦截
   mainWindow.setIgnoreMouseEvents(true, { forward: true });
 
@@ -2523,6 +2530,13 @@ ipcMain.on('quick-chat-reply', (event, { text }) => {
 ipcMain.on('quick-chat-stream-chunk', (event, { text }) => {
   if (quickChatWindow && !quickChatWindow.isDestroyed()) {
     quickChatWindow.webContents.send('ai-stream-chunk', { text });
+  }
+});
+
+// quick-chat 用户发消息 → 通知主窗口宠物进入 thinking 状态
+ipcMain.on('quick-chat-pet-thinking', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('pet-start-thinking');
   }
 });
 

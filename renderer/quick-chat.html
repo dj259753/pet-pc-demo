@@ -149,6 +149,37 @@
       word-break: break-word;
     }
 
+    /* ─── final 升级淡入 ─── */
+    @keyframes fadeMd {
+      from { opacity: 0.4; }
+      to   { opacity: 1; }
+    }
+    .md-fade-in {
+      animation: fadeMd 0.28s ease forwards;
+    }
+
+    /* ─── 新消息提示按钮 ─── */
+    #new-msg-btn {
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 999px;
+      padding: 6px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(79,124,255,0.45);
+      z-index: 100;
+      display: none;
+      animation: slideInBlock 0.18s ease;
+      white-space: nowrap;
+    }
+    #new-msg-btn:hover { background: var(--primary-hover); }
+
     /* ─── 消息复制按钮（悬浮） ─── */
     .msg-copy-btn {
       position: absolute; top: 6px; right: 6px;
@@ -393,6 +424,7 @@
       </div>
     </div>
 
+    <button id="new-msg-btn">↓ 新消息</button>
     <div class="attachments-bar" id="attachments-bar"></div>
 
     <div class="input-area">
@@ -410,7 +442,10 @@
 
     // 配置 marked
     const markedRenderer = new marked.Renderer();
-    markedRenderer.code = function({ text, lang }) {
+    // 兼容旧版 marked：renderer.code 接收 (text, lang, escaped) 三参数
+    markedRenderer.code = function(text, lang, escaped) {
+      // 新版 marked (v5+) 可能传对象，做兼容处理
+      if (text && typeof text === 'object') { lang = text.lang; text = text.text; }
       const language = (lang || '').trim().toLowerCase();
       let highlighted;
       try {
@@ -423,7 +458,11 @@
       const langLabel = language || 'code';
       return `<div class="code-block-wrap"><div class="code-block-header"><span>${escapeHtml(langLabel)}</span><button class="code-copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs">${highlighted}</code></pre></div>`;
     };
-    markedRenderer.html = function({ text }) { return escapeHtml(text); };
+    markedRenderer.html = function(text) {
+      // 兼容旧版（string）和新版（对象）
+      if (text && typeof text === 'object') text = text.text || '';
+      return escapeHtml(text);
+    };
 
     marked.setOptions({ gfm: true, breaks: true, renderer: markedRenderer });
 
@@ -710,6 +749,11 @@
       showProcessTip('已收到，正在思考...');
       startProcessTicker();
 
+      // 通知主窗口宠物进入 thinking 状态（气泡同步）
+      if (window.quickChatAPI?.notifyPetThinking) {
+        window.quickChatAPI.notifyPetThinking();
+      }
+
       // 优先走 Gateway RPC chat.send（完整 Agent loop）
       if (window.quickChatAPI.gatewayChatSend) {
         window.quickChatAPI.gatewayChatSend(activeRequestText)
@@ -801,21 +845,58 @@
     let activeRunId = '';
     let lastAssistantFingerprint = '';
 
-    // ─── 流式输出（纯文本模式，避免每次重渲染 Markdown） ───
+    // ═══════════════════════════════════════════
+    //  方案 A+B：50ms 节流 + 字符批量追加 + smooth 滚动
+    // ═══════════════════════════════════════════
+
+    // ─── 流式输出状态 ───
     let streamingMsgEl = null;
     let streamingBubbleEl = null;
-    let streamingTextEl = null;   // 纯文本展示区（流式期间）
+    let streamingTextEl = null;
     let streamingRawText = '';
     let streamingRafId = null;    // RAF 节流 id
     let pendingStreamText = '';   // 待刷新的文本
+    let streamFlushTimer = null;  // 50ms 节流 timer
 
+    // 清理流式状态
+    function clearStreamingState() {
+      if (streamingRafId) { cancelAnimationFrame(streamingRafId); streamingRafId = null; }
+      if (streamFlushTimer) { clearTimeout(streamFlushTimer); streamFlushTimer = null; }
+      streamingMsgEl = null;
+      streamingBubbleEl = null;
+      streamingTextEl = null;
+      streamingRawText = '';
+      pendingStreamText = '';
+    }
+
+    // 刷新纯文本到 DOM（50ms 节流后执行）
     function flushStreamText() {
+      streamFlushTimer = null;
       streamingRafId = null;
       if (!streamingTextEl) return;
-      // 流式期间过滤 <think> 标签，带光标
       const display = cleanStreamingText(pendingStreamText);
       streamingTextEl.textContent = display;
       scrollToBottom();
+    }
+
+    // 创建流式气泡 DOM
+    function createStreamingBubble() {
+      const msg = document.createElement('div');
+      msg.className = 'msg ai';
+      msg.appendChild(createAvatarEl('ai'));
+      const bubble = document.createElement('div');
+      bubble.className = 'msg-bubble streaming-bubble';
+      const textEl = document.createElement('div');
+      textEl.className = 'streaming-text';
+      bubble.appendChild(textEl);
+      const cursor = document.createElement('span');
+      cursor.className = 'streaming-cursor';
+      bubble.appendChild(cursor);
+      msg.appendChild(bubble);
+      messagesEl.appendChild(msg);
+      streamingMsgEl = msg;
+      streamingBubbleEl = bubble;
+      streamingTextEl = textEl;
     }
 
     if (window.quickChatAPI?.onAIStreamChunk) {
@@ -827,31 +908,15 @@
         pendingStreamText = text;
 
         if (!streamingMsgEl) {
-          // 首次创建流式消息 DOM
-          const msg = document.createElement('div');
-          msg.className = 'msg ai';
-          msg.appendChild(createAvatarEl('ai'));
-          const bubble = document.createElement('div');
-          bubble.className = 'msg-bubble streaming-bubble';
-          // 纯文本容器（流式期间）
-          const textEl = document.createElement('div');
-          textEl.className = 'streaming-text';
-          bubble.appendChild(textEl);
-          // 光标
-          const cursor = document.createElement('span');
-          cursor.className = 'streaming-cursor';
-          bubble.appendChild(cursor);
-          msg.appendChild(bubble);
-          messagesEl.appendChild(msg);
-          streamingMsgEl = msg;
-          streamingBubbleEl = bubble;
-          streamingTextEl = textEl;
-          scrollToBottom();
+          createStreamingBubble();
+          scrollToBottom(true);
         }
 
-        // RAF 节流：最多每帧刷新一次，丢弃中间帧
-        if (!streamingRafId) {
-          streamingRafId = requestAnimationFrame(flushStreamText);
+        // 50ms 节流：积攒字符后一次性刷新
+        if (!streamFlushTimer) {
+          streamFlushTimer = setTimeout(() => {
+            requestAnimationFrame(flushStreamText);
+          }, 50);
         }
       });
     }
@@ -861,30 +926,20 @@
       window.quickChatAPI.onAIReply((text) => {
         hideThinkingAnim();
         clearProcessTip();
+        clearStreamingState();
 
-        // 取消未完成的 RAF
-        if (streamingRafId) {
-          cancelAnimationFrame(streamingRafId);
-          streamingRafId = null;
-        }
-
-        // 过滤 NO_REPLY
         if (text?.trim() === 'NO_REPLY') {
-          if (streamingMsgEl) { streamingMsgEl.remove(); }
-          streamingMsgEl = null;
-          streamingBubbleEl = null;
-          streamingTextEl = null;
-          streamingRawText = '';
-          pendingStreamText = '';
+          if (streamingMsgEl) streamingMsgEl.remove();
+          clearStreamingState();
           isWaiting = false;
           sendBtn.disabled = false;
           return;
         }
 
         if (streamingMsgEl && streamingBubbleEl) {
-          // 流式气泡已存在 → 升级为完整 Markdown 渲染（最终版）
           streamingBubbleEl.innerHTML = '';
           streamingBubbleEl.classList.remove('streaming-bubble');
+          streamingBubbleEl.classList.add('md-fade-in');
           renderAIBubble(streamingBubbleEl, text);
           streamingMsgEl = null;
           streamingBubbleEl = null;
@@ -905,11 +960,25 @@
     // ─── 接收来自主窗口的用户消息 ───
     if (window.quickChatAPI?.onUserMsg) {
       window.quickChatAPI.onUserMsg((text) => {
+        const content = String(text || '').trim();
+        if (!content) return;
+
         if (welcomeEl) welcomeEl.style.display = 'none';
-        appendMessage('user', text);
+
+        // 新用户消息到达时先清理上轮残留，避免“吞气泡/串气泡”
+        hideThinkingAnim();
+        clearProcessTip();
+        clearStreamingState();
+
+        appendMessage('user', content);
         showThinkingAnim();
+
         isWaiting = true;
         sendBtn.disabled = true;
+        activeRequestStartedAt = Date.now();
+        activeRequestText = content;
+        activeRunId = '';
+        showProcessTip('已收到，正在思考...');
       });
     }
 
@@ -953,9 +1022,22 @@
         if (!payload) return;
 
         const payloadRunId = payload.runId || '';
-        if (activeRunId && payloadRunId && payloadRunId !== activeRunId) {
-          return;
+
+        // 锁定 runId：第一个到来的 delta/final 决定本轮 runId
+        // 后续不同 runId 一律忽略（过滤 sub-run / 后台任务产生的额外 final）
+        if (payloadRunId) {
+          if (!activeRunId) {
+            // 第一个事件，锁定本轮 runId
+            if (payload.state === 'delta' || payload.state === 'final') {
+              activeRunId = payloadRunId;
+            }
+          } else if (payloadRunId !== activeRunId) {
+            // 不同 runId，忽略
+            return;
+          }
         }
+
+        // 如果既没在等待、也没有流式气泡在显示，则忽略
         if (!isWaiting && !streamingMsgEl && !streamingRawText) {
           return;
         }
@@ -969,29 +1051,15 @@
             pendingStreamText = text;
 
             if (!streamingMsgEl) {
-              // 首次创建纯文本流式气泡
-              const msg = document.createElement('div');
-              msg.className = 'msg ai';
-              msg.appendChild(createAvatarEl('ai'));
-              const bubble = document.createElement('div');
-              bubble.className = 'msg-bubble streaming-bubble';
-              const textEl = document.createElement('div');
-              textEl.className = 'streaming-text';
-              bubble.appendChild(textEl);
-              const cursor = document.createElement('span');
-              cursor.className = 'streaming-cursor';
-              bubble.appendChild(cursor);
-              msg.appendChild(bubble);
-              messagesEl.appendChild(msg);
-              streamingMsgEl = msg;
-              streamingBubbleEl = bubble;
-              streamingTextEl = textEl;
-              scrollToBottom();
+              createStreamingBubble();
+              scrollToBottom(true);
             }
 
-            // RAF 节流：最多每帧刷新一次
-            if (!streamingRafId) {
-              streamingRafId = requestAnimationFrame(flushStreamText);
+            // 50ms 节流刷新
+            if (!streamFlushTimer) {
+              streamFlushTimer = setTimeout(() => {
+                requestAnimationFrame(flushStreamText);
+              }, 50);
             }
           }
           return;
@@ -1028,8 +1096,10 @@
         if (stream === 'tool') {
           if (data.phase === 'start') {
             handleToolEvent({ type: 'tool_start', phase: 'start', name: data.name || 'tool', toolCallId: data.toolCallId || '', args: data.args });
+          } else if (data.phase === 'update') {
+            handleToolEvent({ type: 'tool_update', name: data.name || 'tool', toolCallId: data.toolCallId || '', output: data.partialResult });
           } else if (data.phase === 'result') {
-            handleToolEvent({ type: 'tool_end', phase: 'result', name: data.name || 'tool', toolCallId: data.toolCallId || '' });
+            handleToolEvent({ type: 'tool_end', phase: 'result', name: data.name || 'tool', toolCallId: data.toolCallId || '', output: data.result });
           }
         } else if (stream === 'lifecycle') {
           if (data.phase === 'start') {
@@ -1051,39 +1121,48 @@
 
       if (evt.type === 'tool_start' || evt.phase === 'start') {
         if (thinkingEl) hideThinkingAnim();
-        // 定型当前流式气泡（如果有），后续 delta 会创建新气泡
+        // 定型当前流式气泡（清空引用，后续 delta 会创建新气泡）
         if (streamingMsgEl) {
           streamingMsgEl = null;
           streamingBubbleEl = null;
+          streamingTextEl = null;
           streamingRawText = '';
         }
         const name = evt.name || 'tool';
         const icon = TOOL_ICONS[name] || '🔧';
         const label = TOOL_LABELS[name] || name;
+        const detail = extractToolArgDetail(evt.args);
         showProcessTip(`正在${label}...`);
-        const card = createLiveToolCard(icon, label, name);
+        const card = createLiveToolCard(icon, label, name, detail);
         const key = evt.toolCallId || `${name}-${Date.now()}`;
+        card.dataset.cardKey = key;
         activeToolCards.set(key, card);
-        if (streamingMsgEl && streamingMsgEl.parentNode) {
-          messagesEl.insertBefore(card, streamingMsgEl);
-        } else {
-          messagesEl.appendChild(card);
-        }
+        messagesEl.appendChild(card);
         scrollToBottom();
         return;
       }
 
+      if (evt.type === 'tool_update') {
+        // partialResult → 更新卡片 preview（不完成）
+        const key = evt.toolCallId || '';
+        const card = key ? activeToolCards.get(key) : findToolCardByName(evt.name || '');
+        if (card && evt.output) {
+          updateToolCardPreview(card, evt.output, false);
+        }
+        return;
+      }
+
       if (evt.type === 'tool_end') {
-        const name = evt.name || 'tool';
-        const label = TOOL_LABELS[name] || name;
+        const key = evt.toolCallId || '';
+        let card = key ? activeToolCards.get(key) : null;
+        // fallback：按工具名找还没完成的卡片
+        if (!card) card = findToolCardByName(evt.name || '');
+        if (card) {
+          if (evt.output) updateToolCardPreview(card, evt.output, true);
+          markToolCardDone(card);
+        }
+        const label = TOOL_LABELS[evt.name || ''] || evt.name || 'tool';
         showProcessTip(`${label}已完成，继续处理中...`);
-        let found = false;
-        activeToolCards.forEach((card, key) => {
-          if (!found && (key.startsWith(name) || card.dataset.toolName === name) && !card.dataset.done) {
-            markToolCardDone(card);
-            found = true;
-          }
-        });
         return;
       }
 
@@ -1093,13 +1172,74 @@
       }
     }
 
+    // 从工具参数中提取摘要 detail（优先 path/command/query/url）
+    function extractToolArgDetail(args) {
+      if (!args) return '';
+      let obj = args;
+      if (typeof args === 'string') {
+        try { obj = JSON.parse(args); } catch { return args.length > 100 ? args.slice(0, 100) + '…' : args; }
+      }
+      if (typeof obj !== 'object' || obj === null) return '';
+      const priority = ['path', 'command', 'cmd', 'query', 'q', 'url', 'to', 'key', 'sessionKey'];
+      for (const k of priority) {
+        if (typeof obj[k] === 'string' && obj[k].trim()) {
+          const v = obj[k].trim();
+          // 路径做 home 简化
+          return v.replace(/\/Users\/[^/]+/g, '~').replace(/\/home\/[^/]+/g, '~').slice(0, 120);
+        }
+      }
+      // fallback：JSON 摘要
+      try {
+        const s = JSON.stringify(obj);
+        return s.length > 80 ? s.slice(0, 80) + '…' : s;
+      } catch { return ''; }
+    }
+
+    // 按工具名找第一个未完成的 card
+    function findToolCardByName(name) {
+      for (const [, card] of activeToolCards) {
+        if (card.dataset.toolName === name && !card.dataset.done) return card;
+      }
+      return null;
+    }
+
+    // 更新工具卡片 preview 区域
+    function updateToolCardPreview(card, output, isFinal) {
+      if (!output) return;
+      const text = typeof output === 'string' ? output : JSON.stringify(output, null, 2);
+      let previewEl = card.querySelector('.tool-card-output');
+      if (!previewEl) {
+        previewEl = document.createElement('div');
+        previewEl.className = 'tool-card-output';
+        card.appendChild(previewEl);
+        // 点击展开/折叠
+        card.classList.add('expandable');
+        card.addEventListener('click', () => card.classList.toggle('expanded'));
+      }
+      const lines = text.split('\n').slice(0, 6).join('\n');
+      const preview = lines.length > 400 ? lines.slice(0, 400) + '…' : lines;
+      const hasMore = text.split('\n').length > 6 || text.length > 400;
+      previewEl.textContent = hasMore ? preview + '\n…' : preview;
+    }
+
     function extractGatewayText(message) {
       if (!message) return null;
       const content = message.content;
       if (typeof content === 'string') return content;
       if (Array.isArray(content)) {
-        const parts = content.filter(p => p && p.type === 'text' && typeof p.text === 'string').map(p => p.text);
-        return parts.length > 0 ? parts.join('\n') : null;
+        const parts = [];
+        const thinkParts = [];
+        for (const p of content) {
+          if (!p) continue;
+          if (p.type === 'text' && typeof p.text === 'string') {
+            parts.push(p.text);
+          } else if (p.type === 'thinking' && typeof p.thinking === 'string' && p.thinking.trim()) {
+            // 结构化 thinking block → 包成 <think> 标签供 processAIOutput 识别
+            thinkParts.push(`<think>${p.thinking.trim()}</think>`);
+          }
+        }
+        const allParts = [...thinkParts, ...parts];
+        return allParts.length > 0 ? allParts.join('\n') : null;
       }
       if (typeof message.text === 'string') return message.text;
       return null;
@@ -1161,16 +1301,7 @@
     function finishActiveRequestUI() {
       hideThinkingAnim();
       clearProcessTip();
-      // 取消未完成的 RAF
-      if (streamingRafId) {
-        cancelAnimationFrame(streamingRafId);
-        streamingRafId = null;
-      }
-      streamingMsgEl = null;
-      streamingBubbleEl = null;
-      streamingTextEl = null;
-      streamingRawText = '';
-      pendingStreamText = '';
+      clearStreamingState();
       activeToolCards.forEach((card) => { if (!card.dataset.done) markToolCardDone(card); });
       activeToolCards.clear();
       isWaiting = false;
@@ -1183,44 +1314,48 @@
 
     async function handleGatewayFinalEvent(payload) {
       hideThinkingAnim();
+      clearProcessTip();
 
-      // 取消未完成的 RAF
-      if (streamingRafId) {
-        cancelAnimationFrame(streamingRafId);
-        streamingRafId = null;
+      // 确保把最新 pending 文本刷入
+      if (streamFlushTimer) { clearTimeout(streamFlushTimer); streamFlushTimer = null; }
+      if (streamingTextEl && pendingStreamText) {
+        streamingTextEl.textContent = cleanStreamingText(pendingStreamText);
       }
 
       const finalText = extractGatewayText(payload.message);
+      const streamText = (streamingRawText || '').trim();
+      const bestText = (() => {
+        if (!finalText || !finalText.trim()) return streamText || null;
+        if (!streamText) return finalText.trim();
+        return finalText.trim().length >= streamText.length ? finalText.trim() : streamText;
+      })();
+
       let rendered = false;
 
-      if (finalText && finalText.trim() && isRenderableAssistantText(finalText)) {
+      if (bestText && isRenderableAssistantText(bestText)) {
         if (streamingMsgEl && streamingBubbleEl) {
-          const current = (streamingRawText || '').trim();
-          const next = finalText.trim();
-          if (!current || next.length >= current.length || !isRenderableAssistantText(current)) {
-            streamingBubbleEl.innerHTML = '';
-            streamingBubbleEl.classList.remove('streaming-bubble');
-            renderAIBubble(streamingBubbleEl, finalText);
-          }
-          rendered = true;
+          streamingBubbleEl.innerHTML = '';
+          streamingBubbleEl.classList.remove('streaming-bubble');
+          streamingBubbleEl.classList.add('md-fade-in');
+          renderAIBubble(streamingBubbleEl, bestText);
+          scrollToBottom();
         } else {
-          appendMessage('ai', finalText);
-          rendered = true;
+          appendMessage('ai', bestText);
         }
-        lastAssistantFingerprint = makeAssistantFingerprint(finalText, getMessageTimestamp(payload.message));
-      } else if (streamingMsgEl || streamingRawText) {
+        lastAssistantFingerprint = makeAssistantFingerprint(bestText, getMessageTimestamp(payload.message));
         rendered = true;
-        const keep = (streamingRawText || '').trim();
-        if (keep) {
-          // 将纯文本气泡升级为 Markdown 渲染
-          if (streamingMsgEl && streamingBubbleEl) {
-            streamingBubbleEl.innerHTML = '';
-            streamingBubbleEl.classList.remove('streaming-bubble');
-            renderAIBubble(streamingBubbleEl, keep);
-          }
-          lastAssistantFingerprint = makeAssistantFingerprint(keep, Date.now());
-        }
+      } else if (streamingMsgEl && streamText) {
+        streamingBubbleEl.innerHTML = '';
+        streamingBubbleEl.classList.remove('streaming-bubble');
+        streamingBubbleEl.classList.add('md-fade-in');
+        renderAIBubble(streamingBubbleEl, streamText);
+        scrollToBottom();
+        lastAssistantFingerprint = makeAssistantFingerprint(streamText, Date.now());
+        rendered = true;
       }
+
+      // 清空流式状态
+      clearStreamingState();
 
       if (!rendered) {
         const fallback = await findAssistantReplyFromHistory(activeRequestStartedAt);
@@ -1240,6 +1375,7 @@
 
     async function handleGatewayAbortOrError(kind = 'error', errorMessage = '') {
       hideThinkingAnim();
+      clearProcessTip();
 
       const fallback = await findAssistantReplyFromHistory(activeRequestStartedAt);
       if (fallback) {
@@ -1259,10 +1395,11 @@
       finishActiveRequestUI();
     }
 
-    function createLiveToolCard(icon, label, toolName) {
+    function createLiveToolCard(icon, label, toolName, detail) {
       const card = document.createElement('div');
       card.className = 'tool-card';
       card.dataset.toolName = toolName;
+      const detailHtml = detail ? `<div class="tool-card-detail">${escapeHtml(detail)}</div>` : '';
       card.innerHTML = `
         <div class="tool-card-header">
           <div class="tool-card-title">
@@ -1271,6 +1408,7 @@
           </div>
           <div class="tool-card-spinner"></div>
         </div>
+        ${detailHtml}
       `;
       return card;
     }
@@ -1284,8 +1422,43 @@
     }
 
     // ─── 工具函数 ───
-    function scrollToBottom() {
-      requestAnimationFrame(() => { messagesEl.scrollTop = messagesEl.scrollHeight; });
+    const newMsgBtn = document.getElementById('new-msg-btn');
+    let userScrolledUp = false;   // 用户是否在手动往上翻
+    let smoothScrollRafId = null; // 防止多次同时调用 smooth scroll
+
+    // 判断是否接近底部（阈值 120px）
+    function isNearBottom() {
+      return messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 120;
+    }
+
+    // 监听用户手动滚动
+    messagesEl.addEventListener('scroll', () => {
+      if (isNearBottom()) {
+        userScrolledUp = false;
+        newMsgBtn.style.display = 'none';
+      } else {
+        userScrolledUp = true;
+      }
+    }, { passive: true });
+
+    // 点击"新消息"按钮跳到底部
+    newMsgBtn.addEventListener('click', () => {
+      userScrolledUp = false;
+      newMsgBtn.style.display = 'none';
+      messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior: 'smooth' });
+    });
+
+    function scrollToBottom(force = false) {
+      if (!force && userScrolledUp) {
+        // 用户在往上翻，不强制跟随，显示新消息提示
+        newMsgBtn.style.display = 'block';
+        return;
+      }
+      if (smoothScrollRafId) return; // 已有一个 smooth 在跑，跳过
+      smoothScrollRafId = requestAnimationFrame(() => {
+        smoothScrollRafId = null;
+        messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior: 'smooth' });
+      });
     }
 
     clearBtn.addEventListener('click', () => {
@@ -1297,9 +1470,12 @@
       isWaiting = false; sendBtn.disabled = false;
       hideThinkingAnim();
       clearProcessTip();
-      streamingMsgEl = null; streamingBubbleEl = null; streamingRawText = '';
+      clearStreamingState();
+      activeToolCards.clear();
       pendingAttachments = [];
       renderAttachmentsBar();
+      userScrolledUp = false;
+      newMsgBtn.style.display = 'none';
     });
 
     sendBtn.addEventListener('click', doSend);
@@ -1366,7 +1542,8 @@
         let latestAssistantTs = 0;
         for (const msg of messages) {
           const role = (msg.role || '').toLowerCase();
-          if (role === 'system') continue; // 跳过 system prompt
+          // 跳过 system / tool 相关角色
+          if (role === 'system' || role === 'tool' || role === 'toolresult' || role === 'tool_result') continue;
           if (role === 'user') {
             const text = extractGatewayText(msg);
             if (text && text.trim()) {
@@ -1374,13 +1551,14 @@
             }
           } else if (role === 'assistant') {
             const text = extractGatewayText(msg);
-            if (text && text.trim()) {
+            // 跳过没有可渲染文本的助手消息（如只有 toolcall 的消息）
+            if (text && text.trim() && isRenderableAssistantText(text)) {
               appendMessage('ai', text);
               latestAssistantText = text;
               latestAssistantTs = getMessageTimestamp(msg);
             }
           }
-          // toolresult 等跳过
+          // 其他类型跳过
         }
         if (latestAssistantText) {
           lastAssistantFingerprint = makeAssistantFingerprint(latestAssistantText, latestAssistantTs);

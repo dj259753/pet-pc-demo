@@ -13,16 +13,22 @@ const TaskbarUI = (() => {
     // ─── 开始菜单（从 hover-panel 设置按钮触发） ───
     const startMenu = document.getElementById('start-menu');
 
-    document.addEventListener('click', (e) => {
-      if (!startMenu.contains(e.target) && !e.target.closest('#btn-settings')) {
+    // mousedown 比 click 更早触发，且不受透明区域穿透影响
+    document.addEventListener('mousedown', (e) => {
+      if (!startMenu.classList.contains('hidden') &&
+          !startMenu.contains(e.target) &&
+          !e.target.closest('#btn-settings')) {
         startMenu.classList.add('hidden');
       }
     });
 
     // 点击桌面或其他应用导致窗口失焦时，也自动收起菜单
-    window.addEventListener('blur', () => {
-      startMenu.classList.add('hidden');
-    });
+    // 同时监听主进程 blur IPC（透明窗口 window.blur 不可靠）
+    const closeMenuOnBlur = () => startMenu.classList.add('hidden');
+    window.addEventListener('blur', closeMenuOnBlur);
+    if (window.electronAPI?.onMainWindowBlur) {
+      window.electronAPI.onMainWindowBlur(closeMenuOnBlur);
+    }
 
     // ─── 菜单项 ───
     document.querySelectorAll('.menu-item').forEach(item => {

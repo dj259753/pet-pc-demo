@@ -35,6 +35,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // ─── 右键菜单 ───
   showContextMenu: () => ipcRenderer.send('show-context-menu'),
+  onMainWindowBlur: (callback) => ipcRenderer.on('main-window-blur', () => callback()),
+  // quick-chat 发消息 → 主窗口宠物进入 thinking 状态
+  onPetStartThinking: (callback) => ipcRenderer.on('pet-start-thinking', () => callback()),
 
   // ─── 番茄钟 Focus Mode ───
   onStartFocusMode: (callback) => ipcRenderer.on('start-focus-mode', () => callback()),

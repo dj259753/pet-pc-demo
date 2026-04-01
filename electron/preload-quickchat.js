@@ -32,4 +32,7 @@ contextBridge.exposeInMainWorld('quickChatAPI', {
 
   // 打开本地文件/文件夹（Finder / 默认程序）
   openLocalPath: (filePath) => ipcRenderer.invoke('open-local-path', filePath),
+
+  // 通知主窗口宠物进入 thinking 状态（用户发送消息时调用）
+  notifyPetThinking: () => ipcRenderer.send('quick-chat-pet-thinking'),
 });

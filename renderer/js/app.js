@@ -162,12 +162,6 @@
 
       const mood = PetState.mood || 'peaceful';
 
-      // 回到 Stand 的通用回调
-      function backToStand() {
-        const stand = SpriteRenderer.qcLoaded ? SpriteRenderer.getQCStand(mood) : null;
-        SpriteRenderer.setAnimation(stand || 'idle');
-      }
-
       if (!SpriteRenderer.qcLoaded) {
         // 无 QC → 走 legacy 映射
         SpriteRenderer.setAnimation(state);
@@ -179,7 +173,8 @@
           const anim = SpriteRenderer.getQCCommon('eat');
           if (anim) {
             SpriteRenderer.loadQCSheet(anim).then(() => {
-              SpriteRenderer.playOnce(anim, backToStand);
+              // 回退到 Stand 交给 Sprite 路由层（backSwf）
+              SpriteRenderer.setAnimation(anim);
             });
           }
           break;
@@ -188,7 +183,8 @@
           const anim = SpriteRenderer.getQCCommon('clean');
           if (anim) {
             SpriteRenderer.loadQCSheet(anim).then(() => {
-              SpriteRenderer.playOnce(anim, backToStand);
+              // 回退到 Stand 交给 Sprite 路由层（backSwf）
+              SpriteRenderer.setAnimation(anim);
             });
           }
           break;
@@ -197,6 +193,7 @@
           const anim = SpriteRenderer.getQCSpeak(mood);
           if (anim) {
             SpriteRenderer.loadQCSheet(anim).then(() => {
+              // Speak 播放与回 Stand 由路由层统一控制
               SpriteRenderer.setAnimation(anim);
             });
           }
@@ -220,8 +217,7 @@
       SpriteRenderer.preloadMoodSheets(mood);
 
       // ─── happy↔prostrate 过渡动画（复刻原版 Etoj/Jtoc） ───
-      // happy → prostrate: 播 Etoj（站→趴），播完切 prostrate-Stand
-      // prostrate → happy: 播 Jtoc（趴→站），播完切 happy-Stand
+      // 注意：播完后的 Stand 回退由 Sprite 路由层 backSwf 统一处理
       const isHappyToProstrate = old === 'happy' && mood === 'prostrate';
       const isProstrateToHappy = old === 'prostrate' && mood === 'happy';
 
@@ -229,10 +225,7 @@
         const etoj = SpriteRenderer.getQCCommon('etoj');
         if (etoj) {
           SpriteRenderer.loadQCSheet(etoj).then(() => {
-            SpriteRenderer.playOnce(etoj, () => {
-              const stand = SpriteRenderer.getQCStand(mood);
-              SpriteRenderer.setAnimation(stand || 'idle');
-            });
+            SpriteRenderer.setAnimation(etoj);
           });
           return;
         }
@@ -240,10 +233,7 @@
         const jtoc = SpriteRenderer.getQCCommon('jtoc');
         if (jtoc) {
           SpriteRenderer.loadQCSheet(jtoc).then(() => {
-            SpriteRenderer.playOnce(jtoc, () => {
-              const stand = SpriteRenderer.getQCStand(mood);
-              SpriteRenderer.setAnimation(stand || 'idle');
-            });
+            SpriteRenderer.setAnimation(jtoc);
           });
           return;
         }
@@ -298,7 +288,7 @@
             constraint: '一句自然开场，20-35字，友好简洁，不要卖萌',
           });
           if (aiGreeting) {
-            BubbleSystem.show(aiGreeting, 4000);
+            BubbleSystem.show(aiGreeting, 4000, { force: true });
             SoundEngine.happy();
             return;
           }
@@ -465,7 +455,7 @@
       BubbleSystem.show('我在听呢', 60000);
     });
 
-    // ─── 停止录音 → 等待最终识别结果 ───
+    // ─── 停止录音 → 立即进入“思考中”反馈 ───
     VoiceMode.onStop(() => {
       console.log('🎤 停止录音，等待最终识别结果...');
       SoundEngine.voiceStop();
@@ -475,11 +465,14 @@
         window.electronAPI.notifyVoiceStop();
       }
 
-      // 隐藏底部字幕（保留到最终结果出来）
-      // 注意：不立即隐藏字幕，等 onResult 拿到最终文字后再隐藏
+      // 需求：第二次 Cmd+K 结束后字幕立刻消失
+      BubbleSystem.hideSubtitle();
 
-      // 隐藏头顶的「我在听呢」气泡
-      BubbleSystem.hide();
+      // 需求：结束后立刻给思考反馈（不等 ASR 最终文本返回）
+      BehaviorEngine.pause();
+      PetState.setState(PetState.STATES.THINKING, 30000);
+      SpriteRenderer.setAnimation('thinking');
+      BubbleSystem.showThinking();
 
       // 重置语音对讲按钮状态
       resetVoiceButton();
@@ -614,16 +607,13 @@
       if (typeof Personality !== 'undefined') Personality.onEvent('interacted');
       if (typeof PetMemory !== 'undefined') PetMemory.addEvent('interacted', '主人拍了拍我~');
 
-      // 互动：播放 QC 互动动画（播完一遍自动回 Stand）
+      // 互动：播放 QC 互动动画（回退到 Stand 由 Sprite 路由层处理）
       SoundEngine.happy();
       const patMood = PetState.mood || 'peaceful';
       const patAnim = SpriteRenderer.qcLoaded ? SpriteRenderer.getQCInteract(patMood) : null;
       if (patAnim) {
         SpriteRenderer.loadQCSheet(patAnim).then(() => {
-          SpriteRenderer.playOnce(patAnim, () => {
-            const stand = SpriteRenderer.getQCStand(patMood);
-            SpriteRenderer.setAnimation(stand || 'idle');
-          });
+          SpriteRenderer.setAnimation(patAnim);
         });
       } else {
         SpriteRenderer.forceSetAnimation('happy_jump');
@@ -636,7 +626,7 @@
             constraint: '一句简短互动回应，可以是打招呼/撒娇/卖萌/吐槽，15-30字，自然随意',
           }).then(reply => {
             if (reply) {
-              BubbleSystem.show(reply, 2500);
+              BubbleSystem.show(reply, 4000, { force: true });
             } else {
               enterOfflineSleep('没网了，我先睡着了。连上网再聊。');
             }
@@ -711,15 +701,13 @@
         if (typeof Personality !== 'undefined') Personality.onEvent('stroked');
         if (typeof PetMemory !== 'undefined') PetMemory.addEvent('stroked', '被主人抚摸了~');
 
-        // 抚摸动画：用当前心情的 H1/H5，playOnce 会先打断当前动画
+        // 抚摸动画：用当前心情的 H1/H5；回退到 Stand 由路由层处理
         if (SpriteRenderer.qcLoaded) {
           const m2mood = PetState.mood || 'peaceful';
           const strokeAnim = SpriteRenderer.getQCStroke(m2mood);
           if (strokeAnim) {
             BehaviorEngine.pause();
             SpriteRenderer.playOnce(strokeAnim, () => {
-              const stand = SpriteRenderer.getQCStand(m2mood);
-              SpriteRenderer.setAnimation(stand || 'idle');
               BehaviorEngine.resume();
             });
           }
@@ -733,7 +721,7 @@
             description: '被主人抚摸了',
             constraint: '一句自然反馈，15-30字，语气温和，不要幼态化',
           }).then(reply => {
-            if (reply) BubbleSystem.show(reply, 2000);
+            if (reply) BubbleSystem.show(reply, 4000, { force: true });
           }).catch(() => {});
         }
 
@@ -825,6 +813,127 @@
       window.electronAPI.onQuickChatClosed(() => {
         BehaviorEngine.resume();
       });
+    }
+
+    // ─── Gateway chat 事件 → 驱动宠物气泡（修复气泡被吞）───
+    // quick-chat 窗口走 Gateway RPC，不经过主窗口的 handleQuickChatMessage，
+    // 所以需要在这里独立监听，驱动宠物气泡 streaming 和 final 显示。
+
+    // 用户在 quick-chat 发消息时 → 宠物进入 thinking 状态
+    if (window.electronAPI && window.electronAPI.onPetStartThinking) {
+      window.electronAPI.onPetStartThinking(() => {
+        BehaviorEngine.pause();
+        PetState.setState(PetState.STATES.THINKING, 30000);
+        SpriteRenderer.setAnimation('thinking');
+        BubbleSystem.showThinking();
+      });
+    }
+    if (window.electronAPI && window.electronAPI.onGatewayChatEvent) {
+      let _gwBubbleRunId = '';   // 锁定本轮 runId，过滤 sub-run
+      let _gwFinalShown = false; // 防止 final 重复触发
+
+      window.electronAPI.onGatewayChatEvent((payload) => {
+        if (!payload) return;
+        const payloadRunId = payload.runId || '';
+
+        // 锁定 runId
+        if (payloadRunId) {
+          if (!_gwBubbleRunId) {
+            if (payload.state === 'delta' || payload.state === 'final') {
+              _gwBubbleRunId = payloadRunId;
+              _gwFinalShown = false;
+            }
+          } else if (payloadRunId !== _gwBubbleRunId) {
+            return; // 过滤其他 run
+          }
+        }
+
+        if (payload.state === 'delta') {
+          // 提取文本（过滤 think 块）
+          const rawText = extractGatewayTextForBubble(payload.message);
+          if (rawText && rawText.trim()) {
+            // 进入思考/说话动画
+            if (PetState.current !== PetState.STATES.TALKING) {
+              PetState.setState(PetState.STATES.THINKING, 30000);
+            }
+            const cleaned = cleanStreamingTextForBubble(rawText);
+            if (cleaned) BubbleSystem.updateStreamingBubble(cleaned);
+          }
+          return;
+        }
+
+        if (payload.state === 'final') {
+          if (_gwFinalShown) return;
+          _gwFinalShown = true;
+
+          const rawText = extractGatewayTextForBubble(payload.message);
+          const displayText = rawText ? cleanFinalTextForBubble(rawText) : '';
+
+          if (displayText) {
+            PetState.setState(PetState.STATES.TALKING, 3000);
+            SpriteRenderer.setAnimation('talking');
+            BubbleSystem.showAIReply(displayText);
+            SoundEngine.aiReply();
+          } else {
+            // final 没有文本：收起 thinking 气泡
+            BubbleSystem.hideThinking();
+            PetState.autoState();
+          }
+
+          // 重置 runId，准备下一轮
+          setTimeout(() => {
+            _gwBubbleRunId = '';
+            _gwFinalShown = false;
+            BehaviorEngine.resume();
+          }, 3500);
+          return;
+        }
+
+        if (payload.state === 'aborted' || payload.state === 'error') {
+          BubbleSystem.hideThinking();
+          PetState.autoState();
+          _gwBubbleRunId = '';
+          _gwFinalShown = false;
+          BehaviorEngine.resume();
+        }
+      });
+    }
+
+    // 辅助：从 Gateway message 提取纯文本（供气泡使用）
+    function extractGatewayTextForBubble(message) {
+      if (!message) return null;
+      const content = message.content;
+      if (typeof content === 'string') return content;
+      if (Array.isArray(content)) {
+        return content.filter(p => p && p.type === 'text' && typeof p.text === 'string')
+          .map(p => p.text).join('') || null;
+      }
+      if (typeof message.text === 'string') return message.text;
+      return null;
+    }
+
+    // 流式阶段过滤 <think> 标签
+    function cleanStreamingTextForBubble(text) {
+      if (!text) return '';
+      return text
+        .replace(/<\s*think(?:ing)?\s*>[\s\S]*?<\s*\/\s*think(?:ing)?\s*>/gi, '')
+        .replace(/<\s*think(?:ing)?\s*>[\s\S]*$/gi, '')
+        .replace(/#soul-update:.*$/m, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+    }
+
+    // final 阶段完整清理（含工具调用标签）
+    function cleanFinalTextForBubble(text) {
+      if (!text) return '';
+      return text
+        .replace(/<\|tool_calls_section_begin\|>[\s\S]*?<\|tool_calls_section_end\|>/g, '')
+        .replace(/<\|(?:tool_calls_section_begin|tool_calls_section_end|tool_call_begin|tool_call_end|tool_sep|im_end|im_start|endoftext|pad)\|>/g, '')
+        .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
+        .replace(/<\s*think(?:ing)?\s*>[\s\S]*?<\s*\/\s*think(?:ing)?\s*>/gi, '')
+        .replace(/#soul-update:.*$/m, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
     }
 
     // ─── Skill 配置对话引导 ───
@@ -1070,8 +1179,14 @@
     SpriteRenderer.setAnimation('thinking');
     BubbleSystem.showThinking();
 
-    // 在对话窗口中标注语音来源
-    ChatSystem.addLine(`[语音] ${text}`, 'user');
+    // ASR 文本按“我”的普通消息沉淀到对话里
+    ChatSystem.addLine(text, 'user');
+
+    // 同步转发到快捷对话窗口，显示为用户消息气泡
+    if (window.electronAPI && window.electronAPI.sendQuickChatUserMsg) {
+      window.electronAPI.sendQuickChatUserMsg(text);
+    }
+
     if (typeof PetDiary !== 'undefined') PetDiary.addEntry('voice_chat', `语音对讲: "${text.substring(0, 20)}${text.length > 20 ? '...' : ''}"`);
     if (typeof PetMemory !== 'undefined') {
       PetMemory.addDialogue('user', text);
@@ -1083,6 +1198,9 @@
     if (!reply) {
       enterOfflineSleep('没网了，我先睡着了。连上网再继续语音对讲。');
       ChatSystem.addLine('[系统] 无网络或模型不可用，宠物已睡眠', 'system');
+      if (window.electronAPI && window.electronAPI.sendQuickChatReply) {
+        window.electronAPI.sendQuickChatReply('网络不可用，我先睡着了。联网后再继续语音对讲。');
+      }
       return;
     }
     PetState.setState(PetState.STATES.TALKING, 3000);
@@ -1090,6 +1208,11 @@
     BubbleSystem.showAIReply(reply);
     SoundEngine.aiReply();
     ChatSystem.addLine(reply, 'ai');
+
+    // 语音链路也要给快捷对话窗口发送 final，避免流式气泡悬空/丢失
+    if (window.electronAPI && window.electronAPI.sendQuickChatReply) {
+      window.electronAPI.sendQuickChatReply(reply);
+    }
 
     if (typeof PetMemory !== 'undefined') {
       PetMemory.addDialogue('assistant', reply);
