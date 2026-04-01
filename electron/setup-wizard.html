@@ -72,6 +72,107 @@ body {
 .step-panel { display: none; }
 .step-panel.active { display: block; }
 
+/* ─── 方案选择卡片 ─── */
+.plan-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.plan-card {
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 18px 16px 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  background: #fff;
+  text-align: left;
+}
+.plan-card:hover:not(.disabled) {
+  border-color: var(--primary);
+  box-shadow: 0 2px 12px rgba(22,119,255,0.1);
+}
+.plan-card.selected {
+  border-color: var(--primary);
+  background: #f0f7ff;
+  box-shadow: 0 2px 12px rgba(22,119,255,0.14);
+}
+.plan-card.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: #f9fafb;
+}
+
+/* 选中勾 */
+.plan-card .check-mark {
+  position: absolute;
+  top: 10px; right: 10px;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px;
+  transition: all 0.2s;
+}
+.plan-card.selected .check-mark {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+
+/* 即将推出 badge */
+.plan-card .soon-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  color: #9ca3af;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-bottom: 8px;
+  letter-spacing: 0.3px;
+}
+
+.plan-card .plan-icon {
+  font-size: 28px;
+  margin-bottom: 8px;
+  line-height: 1;
+}
+.plan-card .plan-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.plan-card .plan-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+.plan-card .plan-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 10px;
+}
+.plan-card .plan-tag {
+  font-size: 10px;
+  color: var(--primary);
+  background: #e6f4ff;
+  border-radius: 4px;
+  padding: 1px 6px;
+  line-height: 1.6;
+}
+.plan-card.disabled .plan-tag {
+  color: #9ca3af;
+  background: #f3f4f6;
+}
+
+/* ─── 通用表单 ─── */
 .form-group {
   margin-bottom: 16px;
 }
@@ -166,17 +267,59 @@ button.secondary:hover { background: #f3f4f6; }
   <div class="wizard-header">
     <img class="logo" src="../assets/icon-96.png" alt="QQ宠物">
     <h1>配置 QQ 宠物</h1>
-    <p>Demo 版本，请先配置 API Key 和模型</p>
+    <p>选择 AI 引擎方案，开启你的智能桌面伙伴</p>
   </div>
 
   <div class="steps">
     <div class="step-dot active" id="dot-0"></div>
     <div class="step-dot" id="dot-1"></div>
+    <div class="step-dot" id="dot-2"></div>
   </div>
 
   <div class="wizard-body">
-    <!-- Step 1: AI 接口配置 -->
+
+    <!-- Step 0: 选择方案 -->
     <div class="step-panel active" id="step-0">
+      <div class="plan-grid">
+
+        <!-- 云端方案（置灰不可选） -->
+        <div class="plan-card disabled" id="card-cloud">
+          <div class="check-mark">✓</div>
+          <div class="soon-badge">即将推出</div>
+          <div class="plan-icon">☁️</div>
+          <div class="plan-name">Lighthouse 云端</div>
+          <div class="plan-desc">接入官方云端 AI 能力，开箱即用，无需本地配置。适合轻量使用场景。</div>
+          <div class="plan-tags">
+            <span class="plan-tag">零配置</span>
+            <span class="plan-tag">轻量安全</span>
+            <span class="plan-tag">文件分析</span>
+            <span class="plan-tag">问答对话</span>
+          </div>
+        </div>
+
+        <!-- 本地方案（默认选中） -->
+        <div class="plan-card selected" id="card-local" onclick="selectPlan('local')">
+          <div class="check-mark">✓</div>
+          <div class="plan-icon">🖥️</div>
+          <div class="plan-name">本地内置引擎</div>
+          <div class="plan-desc">内嵌完整 Agent 执行引擎，拥有系统级权限，可规划并全自动执行复杂任务。</div>
+          <div class="plan-tags">
+            <span class="plan-tag">系统级权限</span>
+            <span class="plan-tag">自主规划</span>
+            <span class="plan-tag">工具调用</span>
+            <span class="plan-tag">全自动执行</span>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="actions">
+        <button class="primary" id="btn-next-plan">下一步 →</button>
+      </div>
+    </div>
+
+    <!-- Step 1: AI 接口配置 -->
+    <div class="step-panel" id="step-1">
       <div class="form-group">
         <label>接口地址</label>
         <input type="url" id="baseURL" placeholder="https://api.example.com/v1" value="">
@@ -191,15 +334,16 @@ button.secondary:hover { background: #f3f4f6; }
         <input type="text" id="modelID" placeholder="doubao-seed-2-0-pro" value="">
         <div class="hint">可在对应平台查看可用模型名称</div>
       </div>
-      <div class="msg" id="step0-msg"></div>
+      <div class="msg" id="step1-msg"></div>
       <div class="actions">
+        <button class="secondary" id="btn-back-1">← 上一步</button>
         <button class="secondary" id="btn-verify">验证连接</button>
-        <button class="primary" id="btn-next-0" disabled>下一步 →</button>
+        <button class="primary" id="btn-next-1" disabled>下一步 →</button>
       </div>
     </div>
 
     <!-- Step 2: ASR 语音配置 -->
-    <div class="step-panel" id="step-1">
+    <div class="step-panel" id="step-2">
       <div class="form-group">
         <label>腾讯云 AppId</label>
         <input type="text" id="asrAppId" placeholder="1234567890">
@@ -213,13 +357,14 @@ button.secondary:hover { background: #f3f4f6; }
         <input type="password" id="asrSecretKey" placeholder="xxxxxxxxxxxxxxxx">
         <div class="hint">用于语音识别功能，可跳过（语音功能不可用）</div>
       </div>
-      <div class="msg" id="step1-msg"></div>
+      <div class="msg" id="step2-msg"></div>
       <div class="actions">
-        <button class="secondary" id="btn-back-1">← 上一步</button>
+        <button class="secondary" id="btn-back-2">← 上一步</button>
         <button class="secondary" id="btn-skip">跳过</button>
         <button class="primary" id="btn-finish">完成启动 🐧</button>
       </div>
     </div>
+
   </div>
 </div>
 
@@ -228,6 +373,20 @@ const $ = id => document.getElementById(id);
 
 let currentStep = 0;
 let providerVerified = false;
+let selectedPlan = 'local';  // 当前只允许 local
+
+// ── 方案选择 ──
+
+function selectPlan(plan) {
+  if (plan === 'cloud') return;  // 云端方案暂不可选
+  selectedPlan = plan;
+  $('card-local').classList.toggle('selected', plan === 'local');
+  $('card-cloud').classList.toggle('selected', plan === 'cloud');
+}
+
+$('btn-next-plan').addEventListener('click', () => {
+  showStep(1);
+});
 
 // ── Step 导航 ──
 
@@ -260,39 +419,41 @@ $('btn-verify').addEventListener('click', async () => {
   const baseURL = $('baseURL').value.trim();
   const modelID = $('modelID').value.trim();
 
-  if (!baseURL) { showMsg('step0-msg', 'error', '请输入接口地址'); return; }
-  if (!apiKey) { showMsg('step0-msg', 'error', '请输入 API Key'); return; }
-  if (!modelID) { showMsg('step0-msg', 'error', '请输入模型名称'); return; }
+  if (!baseURL) { showMsg('step1-msg', 'error', '请输入接口地址'); return; }
+  if (!apiKey) { showMsg('step1-msg', 'error', '请输入 API Key'); return; }
+  if (!modelID) { showMsg('step1-msg', 'error', '请输入模型名称'); return; }
 
-  hideMsg('step0-msg');
+  hideMsg('step1-msg');
   $('btn-verify').disabled = true;
   $('btn-verify').innerHTML = '<span class="loading-spinner"></span>验证中...';
 
   try {
     const result = await window.electronAPI.backendVerifyProvider({ apiKey, baseURL, modelID });
     if (result.success) {
-      showMsg('step0-msg', 'success', '✅ 连接验证成功！');
+      showMsg('step1-msg', 'success', '✅ 连接验证成功！');
       providerVerified = true;
-      $('btn-next-0').disabled = false;
+      $('btn-next-1').disabled = false;
     } else {
-      showMsg('step0-msg', 'error', `❌ 验证失败: ${result.message}`);
+      showMsg('step1-msg', 'error', `❌ 验证失败: ${result.message}`);
     }
   } catch (err) {
-    showMsg('step0-msg', 'error', `❌ 验证出错: ${err.message}`);
+    showMsg('step1-msg', 'error', `❌ 验证出错: ${err.message}`);
   } finally {
     $('btn-verify').disabled = false;
     $('btn-verify').textContent = '验证连接';
   }
 });
 
-$('btn-next-0').addEventListener('click', () => {
+$('btn-next-1').addEventListener('click', () => {
   if (!providerVerified) return;
-  showStep(1);
+  showStep(2);
 });
+
+$('btn-back-1').addEventListener('click', () => showStep(0));
 
 // ── Step 2: ASR 配置 + 完成 ──
 
-$('btn-back-1').addEventListener('click', () => showStep(0));
+$('btn-back-2').addEventListener('click', () => showStep(1));
 
 async function finishSetup() {
   const apiKey = $('apiKey').value.trim();
@@ -300,14 +461,14 @@ async function finishSetup() {
   const modelID = $('modelID').value.trim();
 
   // 保存 AI 配置并启动 Gateway
-  showMsg('step1-msg', 'info', '正在启动 AI 引擎...');
+  showMsg('step2-msg', 'info', '正在启动 AI 引擎...');
   $('btn-finish').disabled = true;
   $('btn-skip').disabled = true;
 
   try {
     const result = await window.electronAPI.backendSaveProvider({ apiKey, baseURL, modelID });
     if (!result.success) {
-      showMsg('step1-msg', 'error', `保存配置失败: ${result.message}`);
+      showMsg('step2-msg', 'error', `保存配置失败: ${result.message}`);
       $('btn-finish').disabled = false;
       $('btn-skip').disabled = false;
       return;
@@ -326,7 +487,7 @@ async function finishSetup() {
     }
 
     // 通知主进程启动宠物
-    showMsg('step1-msg', 'success', '🎉 配置完成，小 Q 正在出生...');
+    showMsg('step2-msg', 'success', '🎉 配置完成，小 Q 正在出生...');
     setTimeout(() => {
       window.electronAPI.launchPet && window.electronAPI.launchPet();
       // 兼容旧 IPC
@@ -335,21 +496,21 @@ async function finishSetup() {
     }, 800);
 
   } catch (err) {
-    showMsg('step1-msg', 'error', `启动失败: ${err.message}`);
+    showMsg('step2-msg', 'error', `启动失败: ${err.message}`);
     $('btn-finish').disabled = false;
     $('btn-skip').disabled = false;
   }
 }
 
 $('btn-finish').addEventListener('click', finishSetup);
-$('btn-skip').addEventListener('click', finishSetup);  // 跳过也走同一流程，只是不保存 ASR
+$('btn-skip').addEventListener('click', finishSetup);  // 跳过也走同一流程
 
 // ── 输入变化时重置验证状态 ──
 ['baseURL', 'apiKey', 'modelID'].forEach(id => {
   $(id).addEventListener('input', () => {
     providerVerified = false;
-    $('btn-next-0').disabled = true;
-    hideMsg('step0-msg');
+    $('btn-next-1').disabled = true;
+    hideMsg('step1-msg');
   });
 });
 </script>
