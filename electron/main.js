@@ -4551,17 +4551,7 @@ function disposeQuitSidecars() {
     globalShortcut.unregisterAll();
   } catch (_) { /* ignore */ }
 
-  if (micProcess) {
-    try {
-      micProcess.stdout?.removeAllListeners?.();
-      micProcess.stderr?.removeAllListeners?.();
-      micProcess.stdin?.removeAllListeners?.();
-    } catch (_) { /* ignore */ }
-    try {
-      micProcess.kill('SIGKILL');
-    } catch (_) { /* ignore */ }
-    micProcess = null;
-  }
+  // 旧版麦克风 sidecar 已移除，这里不再清理 micProcess（避免未定义时报错）。
   if (asrWs) {
     try {
       asrWs.removeAllListeners();
