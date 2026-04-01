@@ -24,7 +24,11 @@ const TaskbarUI = (() => {
 
     // 点击桌面或其他应用导致窗口失焦时，也自动收起菜单
     // 同时监听主进程 blur IPC（透明窗口 window.blur 不可靠）
-    const closeMenuOnBlur = () => startMenu.classList.add('hidden');
+    const closeMenuOnBlur = () => {
+      if (!startMenu.classList.contains('hidden')) {
+        startMenu.classList.add('hidden');
+      }
+    };
     window.addEventListener('blur', closeMenuOnBlur);
     if (window.electronAPI?.onMainWindowBlur) {
       window.electronAPI.onMainWindowBlur(closeMenuOnBlur);

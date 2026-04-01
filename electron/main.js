@@ -290,10 +290,20 @@ function createMainWindow() {
   });
 
   // 窗口失焦（点击其他应用/屏幕空白处）→ 通知渲染端关闭菜单
+  // 注意：只在窗口真正失去焦点（非穿透模式切换）时发送，避免频繁干扰
+  let blurDebounceTimer = null;
   mainWindow.on('blur', () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('main-window-blur');
-    }
+    // 用 debounce 避免穿透模式切换时的抖动
+    clearTimeout(blurDebounceTimer);
+    blurDebounceTimer = setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('main-window-blur');
+      }
+    }, 150);
+  });
+  mainWindow.on('focus', () => {
+    // 重新获焦时取消待发的 blur（避免误触发）
+    clearTimeout(blurDebounceTimer);
   });
 
   // 启用点击穿透（forward 模式），渲染进程通过鼠标位置决定是否拦截

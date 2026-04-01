@@ -819,22 +819,37 @@
     // quick-chat 窗口走 Gateway RPC，不经过主窗口的 handleQuickChatMessage，
     // 所以需要在这里独立监听，驱动宠物气泡 streaming 和 final 显示。
 
-    // 用户在 quick-chat 发消息时 → 宠物进入 thinking 状态
+    // 用户在 quick-chat 发消息时 → 宠物显示 thinking 气泡（轻量版，不干扰行为引擎）
     if (window.electronAPI && window.electronAPI.onPetStartThinking) {
       window.electronAPI.onPetStartThinking(() => {
-        BehaviorEngine.pause();
-        PetState.setState(PetState.STATES.THINKING, 30000);
-        SpriteRenderer.setAnimation('thinking');
+        // 激活 Gateway 事件监听（允许下一轮 delta/final 驱动气泡）
+        if (typeof window._gwBubbleActivate === 'function') window._gwBubbleActivate();
         BubbleSystem.showThinking();
       });
     }
     if (window.electronAPI && window.electronAPI.onGatewayChatEvent) {
       let _gwBubbleRunId = '';   // 锁定本轮 runId，过滤 sub-run
       let _gwFinalShown = false; // 防止 final 重复触发
+      let _gwActive = false;     // 是否有活跃请求（由 notifyPetThinking 触发）
+
+      // onPetStartThinking 触发时激活
+      if (window.electronAPI?.onPetStartThinking) {
+        // 已在上方注册，这里不重复注册，通过共享变量通信
+      }
+
+      // 暴露给 onPetStartThinking 回调用的激活函数
+      window._gwBubbleActivate = () => {
+        _gwActive = true;
+        _gwBubbleRunId = '';
+        _gwFinalShown = false;
+      };
 
       window.electronAPI.onGatewayChatEvent((payload) => {
         if (!payload) return;
         const payloadRunId = payload.runId || '';
+
+        // 只有活跃请求期间才处理
+        if (!_gwActive && payload.state === 'delta') return;
 
         // 锁定 runId
         if (payloadRunId) {
@@ -849,13 +864,8 @@
         }
 
         if (payload.state === 'delta') {
-          // 提取文本（过滤 think 块）
           const rawText = extractGatewayTextForBubble(payload.message);
           if (rawText && rawText.trim()) {
-            // 进入思考/说话动画
-            if (PetState.current !== PetState.STATES.TALKING) {
-              PetState.setState(PetState.STATES.THINKING, 30000);
-            }
             const cleaned = cleanStreamingTextForBubble(rawText);
             if (cleaned) BubbleSystem.updateStreamingBubble(cleaned);
           }
@@ -865,6 +875,7 @@
         if (payload.state === 'final') {
           if (_gwFinalShown) return;
           _gwFinalShown = true;
+          _gwActive = false;
 
           const rawText = extractGatewayTextForBubble(payload.message);
           const displayText = rawText ? cleanFinalTextForBubble(rawText) : '';
@@ -875,7 +886,6 @@
             BubbleSystem.showAIReply(displayText);
             SoundEngine.aiReply();
           } else {
-            // final 没有文本：收起 thinking 气泡
             BubbleSystem.hideThinking();
             PetState.autoState();
           }
@@ -884,17 +894,16 @@
           setTimeout(() => {
             _gwBubbleRunId = '';
             _gwFinalShown = false;
-            BehaviorEngine.resume();
           }, 3500);
           return;
         }
 
         if (payload.state === 'aborted' || payload.state === 'error') {
+          _gwActive = false;
           BubbleSystem.hideThinking();
           PetState.autoState();
           _gwBubbleRunId = '';
           _gwFinalShown = false;
-          BehaviorEngine.resume();
         }
       });
     }
