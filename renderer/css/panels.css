@@ -211,15 +211,15 @@
 }
 
 #btn-feed .action-bar-icon {
-  background-image: url("file:///Users/Apple/Library/Application%20Support/Cursor/User/workspaceStorage/1775028941752/images/image-1eb2fd8e-a7e4-44a4-8a92-53d859ae17ea.png");
+  background-image: url("../sprites/ui/action-feed.png");
 }
 
 #btn-soap .action-bar-icon {
-  background-image: url("file:///Users/Apple/Library/Application%20Support/Cursor/User/workspaceStorage/1775028941752/images/image-a3766391-7ee4-42d7-96f5-b9cee34cdf30.png");
+  background-image: url("../sprites/ui/action-soap.png");
 }
 
 #btn-talk .action-bar-icon {
-  background-image: url("file:///Users/Apple/Library/Application%20Support/Cursor/User/workspaceStorage/1775028941752/images/image-72a1395c-6280-442d-af42-2520aefab1a7.png");
+  background-image: url("../sprites/ui/action-talk.png");
 }
 
 .action-bar-label {
