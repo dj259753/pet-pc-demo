@@ -18,7 +18,6 @@ const ClickThrough = (() => {
     '#quick-chat:not(.hidden)',
     '#start-menu:not(.hidden)',
     '#skill-mode-menu:not(.hidden)',
-    '#translate-pill:not(.hidden)',
     '#meeting-notes-panel:not(.hidden)',
     '#meeting-notes-live',
     '#meeting-notes-fullscreen:not(.hidden)',

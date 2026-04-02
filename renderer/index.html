@@ -414,10 +414,9 @@
   </div>
   <div id="skill-mode-menu" class="hidden">
     <button class="voice-mode-item" data-action="voice-toggle">语音对话</button>
-    <button class="voice-mode-item" id="skill-translate-toggle" data-action="translate-toggle">翻译模式：关闭</button>
+    <!-- 翻译模式入口已屏蔽：恢复时加回按钮 id=skill-translate-toggle + data-action=translate-toggle，以及下方 #translate-pill -->
     <button class="voice-mode-item" data-action="meeting-notes">录音纪要</button>
   </div>
-  <button id="translate-pill" class="hidden" style="position:fixed;right:10px;top:10px;z-index:1250;border:1px solid rgba(0,0,0,0.08);border-radius:12px;padding:4px 8px;background:rgba(255,255,255,0.92);font-size:12px;cursor:pointer;">翻译中 · 点击关闭</button>
 
   <!-- 新手引导弹窗 -->
   <div id="onboarding-overlay" class="hidden" style="position:fixed;inset:0;background:rgba(15,23,42,0.28);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);z-index:1800;display:flex;align-items:center;justify-content:center;">

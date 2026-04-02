@@ -13,6 +13,25 @@ const PanelManager = (() => {
     let translating = false;
     let lastSelectionText = '';
     let selectionPollTimer = null;
+    /** 鼠标经穿透区移向技能菜单时，避免立刻关闭 */
+    let skillMenuCloseDelayTimer = null;
+    const SKILL_MENU_CLOSE_DELAY_MS = 320;
+    function cancelSkillMenuCloseDelay() {
+      if (skillMenuCloseDelayTimer) {
+        clearTimeout(skillMenuCloseDelayTimer);
+        skillMenuCloseDelayTimer = null;
+      }
+    }
+    function scheduleSkillMenuCloseFromHover() {
+      if (!skillModeMenu || skillModeMenu.classList.contains('hidden')) return;
+      cancelSkillMenuCloseDelay();
+      skillMenuCloseDelayTimer = setTimeout(() => {
+        skillMenuCloseDelayTimer = null;
+        if (skillModeMenu && !skillModeMenu.classList.contains('hidden')) {
+          skillModeMenu.classList.add('hidden');
+        }
+      }, SKILL_MENU_CLOSE_DELAY_MS);
+    }
     const feedbackLink = document.getElementById('feedback-link');
     if (feedbackLink) {
       feedbackLink.addEventListener('click', async (e) => {
@@ -113,12 +132,16 @@ const PanelManager = (() => {
       });
     }
 
-    // 🧩 技能按钮：拉起技能菜单（语音对讲/翻译）
+    // 🧩 技能按钮：拉起技能菜单（语音对讲等；翻译入口已在 index.html 屏蔽）
     const btnSkill = document.getElementById('btn-skill');
     if (btnSkill) {
+      btnSkill.addEventListener('mouseenter', () => {
+        cancelSkillMenuCloseDelay();
+      });
       btnSkill.addEventListener('click', (e) => {
         e.stopPropagation();
         BehaviorEngine.notifyInteraction();
+        cancelSkillMenuCloseDelay();
         if (!skillModeMenu) return;
         const hidden = skillModeMenu.classList.contains('hidden');
         if (!hidden) {
@@ -191,11 +214,13 @@ const PanelManager = (() => {
               BubbleSystem.show('录音纪要暂不可用', 1600);
             }
           }
+          cancelSkillMenuCloseDelay();
           skillModeMenu.classList.add('hidden');
         });
       });
-      // 从技能按钮移动到菜单时，保持菜单可用
+      // 从技能按钮移动到菜单时，保持菜单可用，并取消「穿透导致的延迟关闭」
       skillModeMenu.addEventListener('mouseenter', () => {
+        cancelSkillMenuCloseDelay();
         skillModeMenu.classList.remove('hidden');
       });
     }
@@ -214,13 +239,13 @@ const PanelManager = (() => {
       });
     }
 
-    // 当窗口进入点击穿透（鼠标离开交互区）时，自动关闭右键菜单
+    // 当窗口进入点击穿透（鼠标离开交互区）时关闭菜单；技能菜单延迟关闭，便于从按钮移到浮动菜单
     document.addEventListener('click-through:ignored', () => {
       if (voiceModeMenu && !voiceModeMenu.classList.contains('hidden')) {
         voiceModeMenu.classList.add('hidden');
       }
       if (skillModeMenu && !skillModeMenu.classList.contains('hidden')) {
-        skillModeMenu.classList.add('hidden');
+        scheduleSkillMenuCloseFromHover();
       }
     });
 
@@ -294,6 +319,7 @@ const PanelManager = (() => {
       if (voiceModeMenu && !voiceModeMenu.classList.contains('hidden')) {
         voiceModeMenu.classList.add('hidden');
       }
+      cancelSkillMenuCloseDelay();
       if (skillModeMenu && !skillModeMenu.classList.contains('hidden')) {
         skillModeMenu.classList.add('hidden');
       }
@@ -305,6 +331,7 @@ const PanelManager = (() => {
         voiceModeMenu.classList.add('hidden');
       }
       if (skillModeMenu && !e.target.closest('#skill-mode-menu') && !e.target.closest('#btn-skill')) {
+        cancelSkillMenuCloseDelay();
         skillModeMenu.classList.add('hidden');
       }
       // 关闭所有 retro-panel：点击不在面板内、不在触发按钮内
