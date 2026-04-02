@@ -83,6 +83,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // ─── Skills 接入窗口 ───
   openSkillsWindow: () => ipcRenderer.send('open-skills-window'),
+
   onSkillInstalled: (callback) => ipcRenderer.on('skill-installed', (_, data) => callback(data)),
   onSkillConfigureChat: (callback) => ipcRenderer.on('skill-configure-chat', (_, data) => callback(data)),
 

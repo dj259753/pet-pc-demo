@@ -1064,6 +1064,32 @@
   cursor: grabbing;
 }
 
+/* 浅色标题栏：通用 .panel-close 仍是白字+淡底，在此强制高对比关闭按钮 */
+#system-settings-panel .settings-titlebar .panel-close {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 22px;
+  color: rgba(51, 65, 85, 0.92);
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(15, 23, 42, 0.22);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  text-shadow: none;
+}
+
+#system-settings-panel .settings-titlebar .panel-close:hover {
+  background: rgba(239, 68, 68, 0.95);
+  border-color: rgba(220, 38, 38, 0.95);
+  color: #fff;
+  box-shadow: 0 1px 3px rgba(220, 38, 38, 0.35);
+}
+
+#system-settings-panel .settings-titlebar .panel-close:active {
+  transform: scale(0.96);
+}
+
 .settings-body {
   padding: 8px;
   max-height: 372px;

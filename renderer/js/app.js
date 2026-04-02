@@ -349,7 +349,7 @@
   let lastOfflineSleepAt = 0;
 
   // ─── 初始化所有子系统 ───
-  function init() {
+  async function init() {
     console.log('🐧 QQ宠物启动中...');
     ensureMeetingNotesFallback();
 
@@ -455,7 +455,7 @@
     if (typeof Personality !== 'undefined') Personality.init();
     if (typeof PetMemory !== 'undefined') PetMemory.init();
     if (typeof AIBrain !== 'undefined') {
-      AIBrain.init();
+      await AIBrain.init();
       // 流式输出：边生成边实时更新气泡文字
       if (AIBrain.onStreamingReply) {
         AIBrain.onStreamingReply((partialText) => {
@@ -1844,10 +1844,10 @@
     BubbleSystem.show(message, 4500);
   }
 
-  // 等待 DOM 加载完成
+  // 等待 DOM 加载完成（init 为 async，避免 AIBrain.loadAIConfig 未完成就触发开场白）
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', () => { void init(); });
   } else {
-    init();
+    void init();
   }
 })();

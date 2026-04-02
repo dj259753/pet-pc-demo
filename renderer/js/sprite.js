@@ -267,7 +267,7 @@ const SpriteRenderer = (() => {
 
       // 查找 CWS/FWS/ZWS 签名位置（跳过前缀字节）
       let offset = 0;
-      for (let i = 0; i < Math.min(20, arr.length - 3); i++) {
+      for (let i = 0; i < Math.min(64, arr.length - 3); i++) {
         const s = String.fromCharCode(arr[i], arr[i+1], arr[i+2]);
         if (s === 'CWS' || s === 'FWS' || s === 'ZWS') {
           offset = i;

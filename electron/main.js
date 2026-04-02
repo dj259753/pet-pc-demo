@@ -666,16 +666,17 @@ ipcMain.handle('get-ai-config', () => {
     hasIdentity: agentProfile.hasIdentity,
   }));
 
-  // 优先从 openclaw.json 读取用户配置的 AI Provider（直接调用，不经过 Gateway WebSocket）
+  // 内嵌 Gateway 运行时：渲染进程必须用本机 HTTP 入口（带网关 token），
+  // 不能返回上游 directUrl：主进程 verify 走 Node 无 CORS，但 renderer 的 fetch 会被公网 API 的 CORS 拦截，表现为「验证成功、进宠物却断网」。
   try {
     const gwInfo = backend.getGatewayInfo();
-    if (gwInfo.running && gwInfo.directUrl) {
-      const directBase = gwInfo.directUrl.replace(/\/$/, '');
+    if (gwInfo.running && gwInfo.url) {
+      const base = String(gwInfo.url).replace(/\/$/, '');
       return {
         provider: 'openclaw',
-        api_url: `${directBase}/chat/completions`,
-        api_key: gwInfo.directKey,
-        model: gwInfo.directModel,
+        api_url: `${base}/chat/completions`,
+        api_key: gwInfo.token,
+        model: gwInfo.model,
         // 由 AGENTS.yml / fallback 规则动态解析，供 ai-brain.js 读写 SOUL.md 等
         agent_dir: agentProfile.agentDir,
       };
@@ -3541,14 +3542,18 @@ function sanitizeSkillText(text, fallback = '') {
   return raw.replace(/\s+/g, ' ').slice(0, 120);
 }
 
+/** 内嵌 Gateway 的 workspace 技能根目录（与 skills-install 安装目录必须一致） */
+function getPetWorkspaceSkillsRoot() {
+  return path.join(os.homedir(), '.qq-pet', 'workspace', 'skills');
+}
+
 /**
- * 解析所有可能的已安装 skills 目录
- * 优先级：ai-config 中记录的路径 > ~/.qqclaw/ > ~/.openclaw/（旧版兼容）
+ * 解析所有「已安装 skills」扫描目录（合并多路径，兼容旧版数据）。
+ * 首项与 getPetWorkspaceSkillsRoot() 相同，保证与安装目标一致；其后为 ai-config / 独立 QQClaw 等。
  */
 function resolveAllSkillsDirs() {
   const candidates = [];
-  // 最高优先：内嵌 Gateway 的 workspace/skills（~/.qq-pet/workspace/skills）
-  candidates.push(path.join(os.homedir(), '.qq-pet', 'workspace', 'skills'));
+  candidates.push(getPetWorkspaceSkillsRoot());
   // 从 ai-config.json 读取用户实际配置的 claw_home（旧版兼容）
   try {
     const aiCfgPath = path.join(os.homedir(), '.qq-pet', 'config', 'ai-config.json');
@@ -3572,6 +3577,37 @@ function resolveAllSkillsDirs() {
 }
 
 /**
+ * 枚举 skills 根目录下的「技能包」目录（含 SKILL.md）。
+ * - 扁平：workspace/skills/foo/SKILL.md
+ * - 一层嵌套（旧版 install-skills）：workspace/skills/qq-pet/foo/SKILL.md
+ * 不把仅有 _skillhub_meta、无 SKILL.md 的父目录当作技能（避免误报 qq-pet 占位文件夹）。
+ */
+function listSkillPackageDirs(skillsRoot) {
+  const out = [];
+  if (!fs.existsSync(skillsRoot)) return out;
+  const dirs = fs.readdirSync(skillsRoot, { withFileTypes: true })
+    .filter(d => d.isDirectory() && !d.name.startsWith('.'));
+  for (const d of dirs) {
+    const top = path.join(skillsRoot, d.name);
+    if (fs.existsSync(path.join(top, 'SKILL.md'))) {
+      out.push({ skillPath: top, dirName: d.name });
+      continue;
+    }
+    try {
+      const subs = fs.readdirSync(top, { withFileTypes: true })
+        .filter(x => x.isDirectory() && !x.name.startsWith('.'));
+      for (const s of subs) {
+        const nested = path.join(top, s.name);
+        if (fs.existsSync(path.join(nested, 'SKILL.md'))) {
+          out.push({ skillPath: nested, dirName: s.name });
+        }
+      }
+    } catch { /* ignore */ }
+  }
+  return out;
+}
+
+/**
  * 从 QQClaw skills 目录读取已安装 skills 列表
  * 返回 [{ id, name, displayName, desc, source, version, installed: true, emoji, skillsDir }]
  */
@@ -3579,28 +3615,21 @@ function getInstalledSkills() {
   const allDirs = resolveAllSkillsDirs();
   if (allDirs.length === 0) return [];
 
-  const seen = new Set(); // 去重（同名 skill 只取第一个）
+  const seen = new Set(); // 按解析后的 id 去重（同名 skill 只取第一个）
   const results = [];
 
   for (const skillsDir of allDirs) {
-    const dirs = fs.readdirSync(skillsDir, { withFileTypes: true })
-      .filter(d => d.isDirectory());
-
-    for (const d of dirs) {
-      if (seen.has(d.name)) continue; // 已被优先目录收录，跳过
-      seen.add(d.name);
-
-      const skillPath = path.join(skillsDir, d.name);
+    for (const { skillPath, dirName } of listSkillPackageDirs(skillsDir)) {
       const result = {
-        id: d.name,
-        name: d.name,
-        displayName: d.name,
+        id: dirName,
+        name: dirName,
+        displayName: dirName,
         desc: '',
         source: 'unknown',
         version: '',
         installed: true,
         emoji: '🧩',
-        skillsDir, // 记录来源目录，供安装/卸载使用
+        skillsDir, // 记录来源 skills 根目录，供安装/卸载使用
       };
 
       // 读 _skillhub_meta.json
@@ -3642,10 +3671,13 @@ function getInstalledSkills() {
         } catch (e) { /* ignore */ }
       }
 
-      result.id = sanitizeSkillText(result.id, d.name);
-      result.name = sanitizeSkillText(result.name, d.name);
+      result.id = sanitizeSkillText(result.id, dirName);
+      result.name = sanitizeSkillText(result.name, dirName);
       result.displayName = sanitizeSkillText(result.displayName, result.name);
       result.desc = sanitizeSkillText(result.desc, '描述暂不可读');
+
+      if (seen.has(result.id)) continue;
+      seen.add(result.id);
       results.push(result);
     }
   }
@@ -3656,10 +3688,7 @@ function getInstalledSkills() {
 function resolveInstalledSkillDir(skillId) {
   const allDirs = resolveAllSkillsDirs();
   for (const skillsDir of allDirs) {
-    const dirs = fs.readdirSync(skillsDir, { withFileTypes: true }).filter(d => d.isDirectory());
-    for (const d of dirs) {
-      const dirName = d.name;
-      const skillPath = path.join(skillsDir, dirName);
+    for (const { skillPath, dirName } of listSkillPackageDirs(skillsDir)) {
       if (dirName === skillId) return skillPath;
 
       const metaPath = path.join(skillPath, '_skillhub_meta.json');
@@ -3894,17 +3923,8 @@ ipcMain.handle('skills-install', async (event, { skillId, source }) => {
   console.log(`🧩 安装 Skill: ${skillId} (来源: ${source})`);
 
   try {
-    // 优先安装到 ~/.qq-pet/workspace/skills，回退到 ai-config 配置的目录
-    let skillsBaseDir = path.join(os.homedir(), '.qq-pet', 'workspace', 'skills');
-    try {
-      const aiCfgPath = path.join(os.homedir(), '.qq-pet', 'config', 'ai-config.json');
-      if (fs.existsSync(aiCfgPath)) {
-        const aiCfg = JSON.parse(fs.readFileSync(aiCfgPath, 'utf-8'));
-        if (aiCfg.claw_home) {
-          skillsBaseDir = path.join(String(aiCfg.claw_home).replace(/^~/, os.homedir()), 'workspace', 'skills');
-        }
-      }
-    } catch {}
+    // 必须与内嵌 Gateway 的 workspace 一致，且与 resolveAllSkillsDirs 首项相同。
+    const skillsBaseDir = getPetWorkspaceSkillsRoot();
     fs.mkdirSync(skillsBaseDir, { recursive: true });
 
     if (source === 'skillhub-store') {

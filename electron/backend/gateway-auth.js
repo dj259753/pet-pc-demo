@@ -88,7 +88,25 @@ function resolveGatewayAuthToken(opts = {}) {
   return token;
 }
 
+/**
+ * DMG 内置 Gateway：必须开启 HTTP `/v1/chat/completions`（宠物渲染进程直连本机 Gateway），
+ * 并允许 Electron `file://` 对应的 `null` origin（与 shell 安装脚本改 openclaw.json 的行为一致）。
+ * 仅走应用内向导、从未跑过 install.sh 的用户依赖此处补全。
+ */
+function mergePetGatewayDefaultsForBundledApp(config) {
+  ensureControlUiAllowedOriginsInConfig(config);
+  config.gateway ??= {};
+  config.gateway.http ??= {};
+  config.gateway.http.endpoints ??= {};
+  const chat = config.gateway.http.endpoints.chatCompletions ??= {};
+  if (chat.enabled !== false) {
+    chat.enabled = true;
+  }
+}
+
 module.exports = {
   ensureGatewayAuthTokenInConfig,
   resolveGatewayAuthToken,
+  ensureControlUiAllowedOriginsInConfig,
+  mergePetGatewayDefaultsForBundledApp,
 };
